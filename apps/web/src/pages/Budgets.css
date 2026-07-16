@@ -1,0 +1,134 @@
+/* Budgets page */
+
+/* Period Navigator */
+.budget-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px !important; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+.budget-view-toggle { display: flex; gap: 6px; }
+.budget-period-nav { display: flex; align-items: center; gap: 10px; }
+.nav-arrow {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--text-2); cursor: pointer; transition: all 0.2s;
+}
+.nav-arrow:hover { background: var(--panel-hover); color: var(--text-1); }
+.period-label { font-size: 1rem; font-weight: 700; min-width: 160px; text-align: center; }
+.year-label   { min-width: 60px; }
+
+/* View toggle active */
+.view-active { border-color: var(--accent) !important; color: var(--accent-light) !important; }
+
+/* ── BULK ENTRY ── */
+.bulk-wrap { padding: 0 !important; overflow: hidden; margin-bottom: 20px; }
+
+.bulk-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border); font-size: 0.9rem;
+}
+
+/* Group pill tabs */
+.bulk-group-tabs {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.1);
+}
+.bulk-group-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 99px;
+  font-size: 0.82rem; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--text-2); transition: all 0.2s;
+}
+.bulk-group-tab:hover { background: var(--panel-hover); color: var(--text-1); }
+.bulk-group-tab.active {
+  background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4);
+  color: var(--accent-light);
+}
+.bulk-saved-dot {
+  background: var(--green); color: #000; font-size: 0.65rem;
+  font-weight: 700; border-radius: 99px; min-width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 4px;
+}
+
+/* 2-column compact grid */
+.bulk-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 16px 20px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.bulk-cat-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; margin: 4px 0 2px;
+  background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 8px;
+}
+.bulk-cat-label { font-weight: 600; font-size: 0.9rem; }
+
+.bulk-sub-cell {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 12px; border-bottom: 1px solid var(--border);
+}
+.bulk-sub-label { font-size: 0.82rem; color: var(--text-2); flex: 1; margin-right: 8px; }
+
+.bulk-amount-input {
+  width: 110px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: rgba(0,0,0,0.3); color: var(--text-1);
+  font-size: 0.85rem; text-align: right;
+  outline: none; font-family: inherit; flex-shrink: 0;
+}
+.bulk-amount-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.bulk-amount-input::placeholder { color: var(--text-3); }
+
+.bulk-footer {
+  padding: 14px 20px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end;
+  background: rgba(0,0,0,0.1);
+}
+
+/* ── Group block for cards ── */
+.budget-group-block {
+  padding: 0 !important; overflow: hidden; margin-bottom: 16px;
+}
+.budget-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: rgba(0,0,0,0.15);
+  border-bottom: 1px solid var(--border);
+}
+.budget-group-total { font-size: 0.85rem; color: var(--text-2); }
+.budget-group-total strong { color: var(--text-1); }
+
+/* Cards grid */
+.budgets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px; padding: 16px 20px;
+}
+.budget-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+  display: flex; flex-direction: column; gap: 5px;
+  transition: transform 0.2s;
+}
+.budget-card:hover { transform: translateY(-2px); }
+.bc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+.bc-name { font-size: 0.92rem; font-weight: 600; }
+.bc-sub  { font-size: 0.75rem; color: var(--text-2); margin-top: 2px; }
+.bc-amount { font-size: 1.3rem; font-weight: 800; color: var(--accent-light); }
+.bc-notes { font-size: 0.78rem; color: var(--text-2); font-style: italic; }
+.bc-period-tag {
+  font-size: 0.7rem; color: var(--text-3);
+  border-top: 1px solid var(--border); padding-top: 5px; margin-top: 3px;
+}
+
+/* Auto-group hint in modal */
+.auto-group-hint {
+  display: block; font-size: 0.78rem; color: var(--text-2); margin-top: 4px;
+}
+.auto-group-hint strong { color: var(--accent-light); }

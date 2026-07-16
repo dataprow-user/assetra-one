@@ -1,0 +1,13 @@
+{
+  "name": "assetra-one",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Assetra One - Monorepo for Web and Mobile Apps",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web"
+  }
+}

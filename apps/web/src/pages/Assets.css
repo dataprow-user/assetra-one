@@ -1,0 +1,111 @@
+/* Assets page */
+
+/* View toggle active state */
+.view-active { border-color: var(--accent) !important; color: var(--accent-light) !important; }
+
+/* Table header hints */
+.th-hint { font-weight: 400; font-size: 0.7rem; color: var(--text-3); text-transform: none; letter-spacing: 0; }
+
+.field-hint { color: var(--text-3); font-size: 0.78rem; font-weight: 400; margin-left: 4px; }
+
+/* Info help box */
+.asset-help-box {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--blue-bg); border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+  font-size: 0.84rem; color: var(--text-2); line-height: 1.6; margin-bottom: 20px;
+}
+.asset-help-box strong { color: var(--text-1); }
+.asset-help-box svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
+
+/* Live calc preview */
+.asset-calc-preview { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.acp-item {
+  flex: 1; min-width: 120px;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.acp-item span { font-size: 0.78rem; color: var(--text-2); }
+.acp-item strong { font-size: 1rem; }
+
+/* ── By Type view ── */
+.type-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.type-card { display: flex; flex-direction: column; gap: 0; padding: 0 !important; overflow: hidden; }
+
+.type-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border);
+}
+.type-badge {
+  padding: 5px 12px; border-radius: 99px; font-size: 0.82rem; font-weight: 700;
+}
+.type-count { font-size: 0.8rem; color: var(--text-2); }
+
+.type-summary-row {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.type-num {
+  flex: 1; display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 14px; border-right: 1px solid var(--border);
+}
+.type-num:last-child { border-right: none; }
+.type-num span { font-size: 0.72rem; color: var(--text-2); }
+.type-num strong { font-size: 0.92rem; }
+
+.type-items { display: flex; flex-direction: column; }
+.type-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px; border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.type-item:last-child { border-bottom: none; }
+.type-item:hover { background: var(--panel-hover); }
+.type-item-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.type-item-name { font-size: 0.88rem; font-weight: 500; }
+.type-item-qty  { font-size: 0.75rem; color: var(--text-2); }
+.type-item-vals { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 0.88rem; font-weight: 600; }
+
+/* ── Type Manager ── */
+.type-manage-list { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
+.type-manage-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: rgba(0,0,0,0.15);
+}
+
+
+.field-hint {
+  color: var(--text-3); font-size: 0.78rem; font-weight: 400; margin-left: 4px;
+}
+
+/* Info help box */
+.asset-help-box {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--blue-bg); border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+  font-size: 0.84rem; color: var(--text-2); line-height: 1.6;
+  margin-bottom: 20px;
+}
+.asset-help-box strong { color: var(--text-1); }
+.asset-help-box svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
+
+/* Live calc preview */
+.asset-calc-preview {
+  display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.acp-item {
+  flex: 1; min-width: 120px;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.acp-item span { font-size: 0.78rem; color: var(--text-2); }
+.acp-item strong { font-size: 1rem; }

@@ -1,0 +1,37 @@
+.events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+.event-card { display: flex; flex-direction: column; gap: 12px; }
+
+.ev-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.ev-name  { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+.ev-dates { font-size: 0.8rem; color: var(--text-2); }
+
+/* Stats — 4 columns */
+.ev-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.ev-stat-label { display: block; font-size: 0.68rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.ev-stat-val   { font-size: 0.9rem; font-weight: 700; }
+
+/* Linked transactions accordion */
+.ev-txn-section { border-top: 1px solid var(--border); padding-top: 8px; }
+
+.ev-txn-toggle {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.8rem; color: var(--text-2); cursor: pointer;
+  background: none; border: none; padding: 0; font-family: inherit;
+  transition: color 0.15s;
+}
+.ev-txn-toggle:hover { color: var(--text-1); }
+
+.ev-txn-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.ev-txn-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(0,0,0,0.2); font-size: 0.82rem;
+}
+.ev-txn-cat  { font-weight: 500; }
+.ev-txn-sub  { color: var(--text-2); }
+.ev-txn-date { color: var(--text-3); font-size: 0.74rem; }
+.ev-txn-amt  { font-weight: 600; font-size: 0.85rem; }
+
+/* Badge variants */
+.badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }

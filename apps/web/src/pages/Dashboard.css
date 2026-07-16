@@ -1,0 +1,46 @@
+.dashboard { display: flex; flex-direction: column; gap: 24px; }
+
+.stat-card { display: flex; flex-direction: column; gap: 8px; }
+.stat-card-top { display: flex; align-items: center; justify-content: space-between; }
+.stat-label { font-size: 0.82rem; font-weight: 500; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.stat-value { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }
+.stat-sub { font-size: 0.82rem; font-weight: 500; }
+
+.dashboard-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 1024px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+/* Transactions */
+.txn-list { display: flex; flex-direction: column; gap: 4px; }
+.txn-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.txn-row:last-child { border-bottom: none; }
+.txn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.txn-dot.green { background: var(--green); }
+.txn-dot.red { background: var(--red); }
+.txn-info { flex: 1; }
+.txn-desc { display: block; font-size: 0.9rem; font-weight: 500; }
+.txn-meta { display: block; font-size: 0.75rem; color: var(--text-2); }
+
+/* Budgets */
+.budget-list { display: flex; flex-direction: column; gap: 18px; }
+.budget-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.budget-name { font-size: 0.9rem; font-weight: 500; }
+.budget-nums { display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.78rem; color: var(--text-2); }
+
+/* Due */
+.due-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.due-row:last-child { border-bottom: none; }
+.due-info { display: flex; align-items: center; gap: 10px; }
+.due-name { font-size: 0.9rem; font-weight: 500; }
+
+/* Assets vs Liabilities */
+.av-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+.av-item { display: flex; flex-direction: column; gap: 6px; }
+.av-label { font-size: 0.78rem; color: var(--text-2); font-weight: 500; text-transform: uppercase; }
+.av-value { font-size: 1.3rem; font-weight: 700; }

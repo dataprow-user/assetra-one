@@ -1,0 +1,61 @@
+.cat-tabs { display: flex; gap: 8px; align-items: center; }
+.cat-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.1); border-radius: 99px;
+  font-size: 0.72rem; font-weight: 700; min-width: 20px; height: 20px;
+  padding: 0 6px; margin-left: 6px;
+}
+
+.cat-groups { display: flex; flex-direction: column; gap: 16px; }
+
+.cat-group-block { padding: 0 !important; overflow: hidden; }
+.cat-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.15);
+}
+
+/* Category Row */
+.cat-row { border-bottom: 1px solid var(--border); }
+.cat-row:last-child { border-bottom: none; }
+
+.cat-row-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; cursor: pointer; transition: background 0.15s;
+}
+.cat-row-header:hover { background: var(--panel-hover); }
+
+.cat-row-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.expand-btn { color: var(--text-2); display: flex; align-items: center; cursor: pointer; }
+.cat-name { font-size: 0.92rem; font-weight: 500; }
+.sub-count-badge {
+  font-size: 0.72rem; color: var(--text-2);
+  background: var(--panel); border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 99px;
+}
+
+.cat-row-actions { display: flex; gap: 4px; }
+
+/* Subcategory panel */
+.sub-panel {
+  padding: 14px 20px 16px 52px;
+  background: rgba(0,0,0,0.1);
+  border-top: 1px solid var(--border);
+}
+
+.sub-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.sub-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25);
+  color: var(--accent-light); border-radius: 99px;
+  font-size: 0.8rem; font-weight: 500; padding: 4px 10px;
+}
+.sub-chip-del {
+  display: flex; align-items: center; cursor: pointer;
+  color: rgba(99,102,241,0.6); transition: color 0.15s;
+  background: none; border: none; padding: 0;
+}
+.sub-chip-del:hover { color: var(--red); }
+
+.add-sub-row { display: flex; gap: 8px; align-items: center; }
+.add-sub-input { max-width: 280px; padding: 8px 12px; font-size: 0.85rem; }

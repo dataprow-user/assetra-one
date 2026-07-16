@@ -1,0 +1,13 @@
+.accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+.account-card { display: flex; flex-direction: column; transition: transform 0.2s; }
+.account-card:hover { transform: translateY(-2px); }
+.acc-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.acc-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.acc-name { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+.acc-type { font-size: 0.75rem !important; align-self: flex-start; }
+.acc-balance { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+.acc-meta { font-size: 0.78rem; color: var(--text-2); }
