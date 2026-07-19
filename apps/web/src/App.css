@@ -1,5 +1,6 @@
 .app-shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -23,13 +24,20 @@
   border-radius: 50%; pointer-events: none; z-index: 0;
 }
 
+/* The row holding sidebar + main page content */
+.app-shell-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
 .app-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative;
-  z-index: 1;
 }
 
 .app-content {
@@ -38,3 +46,23 @@
   padding: 28px 32px;
   position: relative;
 }
+
+/* ── Auto Backup Due Banner ── */
+.backup-banner {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  padding: 12px 24px; z-index: 1000;
+  background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(168,85,247,0.14));
+  border-bottom: 1px solid rgba(99,102,241,0.3);
+  backdrop-filter: blur(12px);
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+.backup-banner.synced {
+  background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08));
+  border-bottom-color: rgba(16,185,129,0.25);
+}
+.backup-banner-content { display: flex; align-items: center; gap: 10px; color: var(--text-1); }
+.backup-banner-icon { font-size: 1.1rem; }
+.backup-banner-actions { display: flex; gap: 8px; }
+.btn-sm { padding: 6px 14px !important; font-size: 0.82rem !important; }
+

@@ -11,7 +11,7 @@ const USERS_KEY = 'a1_users';
 const AUTH_KEY  = 'a1_auth';
 const DATA_KEY  = 'a1_data';
 
-// Default asset types
+// ── Default Asset Types ──
 export const DEFAULT_ASSET_TYPES = [
   { id:'at-1', key:'gold',        label:'Gold',          color:'var(--yellow)' },
   { id:'at-2', key:'mutual_fund', label:'Mutual Fund',   color:'var(--blue)' },
@@ -24,16 +24,54 @@ export const DEFAULT_ASSET_TYPES = [
   { id:'at-9', key:'other',       label:'Other',         color:'var(--text-2)' },
 ];
 
-// Default liability types
+// ── Default Liability Types ──
 export const DEFAULT_LIABILITY_TYPES = [
-  { id:'lt-1', key:'home_loan',       label:'Home Loan',      color:'var(--blue)' },
-  { id:'lt-2', key:'gold_loan',       label:'Gold Loan',      color:'var(--yellow)' },
-  { id:'lt-3', key:'personal_loan',   label:'Personal Loan',  color:'var(--red)' },
-  { id:'lt-4', key:'vehicle_loan',    label:'Vehicle Loan',   color:'var(--green)' },
-  { id:'lt-5', key:'education_loan',  label:'Education Loan', color:'#06b6d4' },
-  { id:'lt-6', key:'credit_card_debt',label:'CC Debt',        color:'var(--accent-light)' },
-  { id:'lt-7', key:'other',           label:'Other',          color:'var(--text-2)' },
+  { id:'lt-1', key:'home_loan',        label:'Home Loan',      color:'var(--blue)' },
+  { id:'lt-2', key:'gold_loan',        label:'Gold Loan',      color:'var(--yellow)' },
+  { id:'lt-3', key:'personal_loan',    label:'Personal Loan',  color:'var(--red)' },
+  { id:'lt-4', key:'vehicle_loan',     label:'Vehicle Loan',   color:'var(--green)' },
+  { id:'lt-5', key:'education_loan',   label:'Education Loan', color:'#06b6d4' },
+  { id:'lt-6', key:'credit_card_debt', label:'CC Debt',        color:'var(--accent-light)' },
+  { id:'lt-7', key:'other',            label:'Other',          color:'var(--text-2)' },
 ];
+
+// ── Empty state (what "Reset All" produces) ──
+export function emptyState() {
+  return {
+    transactions: [],
+    accounts: [],
+    assets: [],
+    liabilities: [],
+    budgets: [],
+    events: [],
+    insurance: [],
+    household: { name: 'My Household', members: [] },
+    expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+    incomeCategories: DEFAULT_INCOME_CATEGORIES,
+    groups: DEFAULT_GROUPS,
+    assetTypes: DEFAULT_ASSET_TYPES,
+    liabilityTypes: DEFAULT_LIABILITY_TYPES,
+  };
+}
+
+// ── Sample / demo state ──
+export function sampleState() {
+  return {
+    transactions: SEED_TRANSACTIONS,
+    accounts: SEED_ACCOUNTS,
+    assets: SEED_ASSETS,
+    liabilities: SEED_LIABILITIES,
+    budgets: SEED_BUDGETS,
+    events: SEED_EVENTS,
+    insurance: SEED_INSURANCE,
+    household: { name: 'Kumar Family', members: SEED_USERS },
+    expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+    incomeCategories: DEFAULT_INCOME_CATEGORIES,
+    groups: DEFAULT_GROUPS,
+    assetTypes: DEFAULT_ASSET_TYPES,
+    liabilityTypes: DEFAULT_LIABILITY_TYPES,
+  };
+}
 
 function loadState() {
   try {
@@ -65,39 +103,31 @@ function initialState() {
     if (!saved.liabilityTypes)    saved.liabilityTypes    = DEFAULT_LIABILITY_TYPES;
     return saved;
   }
-  return {
-    transactions: SEED_TRANSACTIONS,
-    accounts: SEED_ACCOUNTS,
-    assets: SEED_ASSETS,
-    liabilities: SEED_LIABILITIES,
-    budgets: SEED_BUDGETS,
-    events: SEED_EVENTS,
-    insurance: SEED_INSURANCE,
-    household: { name: 'Kumar Family', members: SEED_USERS },
-    expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
-    incomeCategories: DEFAULT_INCOME_CATEGORIES,
-    groups: DEFAULT_GROUPS,
-    assetTypes: DEFAULT_ASSET_TYPES,
-    liabilityTypes: DEFAULT_LIABILITY_TYPES,
-  };
+  // First time: start with empty state (user fills their own data)
+  return emptyState();
 }
 
 // ── Helpers for account balance auto-update ──
 function txDelta(t) {
   if (!t || !t.account) return null;
   const amount = Number(t.amount) || 0;
-  if (t.type === 'income')   return { id: t.account, delta: +amount };
-  if (t.type === 'expense')  return { id: t.account, delta: -amount };
+  if (t.type === 'income')  return { id: t.account, delta: +amount };
+  if (t.type === 'expense') return { id: t.account, delta: -amount };
   return null;
 }
 
 function applyDelta(accounts, delta) {
   if (!delta) return accounts;
-  return accounts.map(a => a.id === delta.id ? { ...a, balance: (Number(a.balance)||0) + delta.delta } : a);
+  return accounts.map(a => a.id === delta.id ? { ...a, balance: (Number(a.balance) || 0) + delta.delta } : a);
 }
 
 function reducer(state, action) {
   switch (action.type) {
+
+    // ── Global Reset / Load ──
+    case 'RESET_ALL':        return emptyState();
+    case 'LOAD_SAMPLE_DATA': return sampleState();
+    case 'IMPORT_DATA':      return { ...emptyState(), ...action.payload };
 
     // ── Transactions (with account balance sync) ──
     case 'ADD_TRANSACTION': {
@@ -108,8 +138,7 @@ function reducer(state, action) {
     case 'UPDATE_TRANSACTION': {
       const newT = action.payload;
       const oldT = state.transactions.find(t => t.id === newT.id);
-      // Reverse old effect, apply new
-      let accounts = applyDelta(state.accounts, oldT ? { id: txDelta(oldT)?.id, delta: -(txDelta(oldT)?.delta||0) } : null);
+      let accounts = applyDelta(state.accounts, oldT ? { id: txDelta(oldT)?.id, delta: -(txDelta(oldT)?.delta || 0) } : null);
       accounts = applyDelta(accounts, txDelta(newT));
       return { ...state, transactions: state.transactions.map(t => t.id === newT.id ? newT : t), accounts };
     }
@@ -121,96 +150,62 @@ function reducer(state, action) {
     }
 
     // ── Accounts ──
-    case 'ADD_ACCOUNT':
-      return { ...state, accounts: [...state.accounts, action.payload] };
-    case 'UPDATE_ACCOUNT':
-      return { ...state, accounts: state.accounts.map(a => a.id === action.payload.id ? action.payload : a) };
-    case 'DELETE_ACCOUNT':
-      return { ...state, accounts: state.accounts.filter(a => a.id !== action.payload) };
+    case 'ADD_ACCOUNT':    return { ...state, accounts: [...state.accounts, action.payload] };
+    case 'UPDATE_ACCOUNT': return { ...state, accounts: state.accounts.map(a => a.id === action.payload.id ? action.payload : a) };
+    case 'DELETE_ACCOUNT': return { ...state, accounts: state.accounts.filter(a => a.id !== action.payload) };
 
     // ── Assets ──
-    case 'ADD_ASSET':
-      return { ...state, assets: [...state.assets, action.payload] };
-    case 'UPDATE_ASSET':
-      return { ...state, assets: state.assets.map(a => a.id === action.payload.id ? action.payload : a) };
-    case 'DELETE_ASSET':
-      return { ...state, assets: state.assets.filter(a => a.id !== action.payload) };
+    case 'ADD_ASSET':    return { ...state, assets: [...state.assets, action.payload] };
+    case 'UPDATE_ASSET': return { ...state, assets: state.assets.map(a => a.id === action.payload.id ? action.payload : a) };
+    case 'DELETE_ASSET': return { ...state, assets: state.assets.filter(a => a.id !== action.payload) };
 
     // ── Asset Types ──
-    case 'ADD_ASSET_TYPE':
-      return { ...state, assetTypes: [...(state.assetTypes||[]), action.payload] };
-    case 'UPDATE_ASSET_TYPE':
-      return { ...state, assetTypes: (state.assetTypes||[]).map(t => t.id === action.payload.id ? action.payload : t) };
-    case 'DELETE_ASSET_TYPE':
-      return { ...state, assetTypes: (state.assetTypes||[]).filter(t => t.id !== action.payload) };
+    case 'ADD_ASSET_TYPE':    return { ...state, assetTypes: [...(state.assetTypes || []), action.payload] };
+    case 'UPDATE_ASSET_TYPE': return { ...state, assetTypes: (state.assetTypes || []).map(t => t.id === action.payload.id ? action.payload : t) };
+    case 'DELETE_ASSET_TYPE': return { ...state, assetTypes: (state.assetTypes || []).filter(t => t.id !== action.payload) };
 
     // ── Liabilities ──
-    case 'ADD_LIABILITY':
-      return { ...state, liabilities: [...state.liabilities, action.payload] };
-    case 'UPDATE_LIABILITY':
-      return { ...state, liabilities: state.liabilities.map(l => l.id === action.payload.id ? action.payload : l) };
-    case 'DELETE_LIABILITY':
-      return { ...state, liabilities: state.liabilities.filter(l => l.id !== action.payload) };
+    case 'ADD_LIABILITY':    return { ...state, liabilities: [...state.liabilities, action.payload] };
+    case 'UPDATE_LIABILITY': return { ...state, liabilities: state.liabilities.map(l => l.id === action.payload.id ? action.payload : l) };
+    case 'DELETE_LIABILITY': return { ...state, liabilities: state.liabilities.filter(l => l.id !== action.payload) };
 
     // ── Liability Types ──
-    case 'ADD_LIABILITY_TYPE':
-      return { ...state, liabilityTypes: [...(state.liabilityTypes||[]), action.payload] };
-    case 'UPDATE_LIABILITY_TYPE':
-      return { ...state, liabilityTypes: (state.liabilityTypes||[]).map(t => t.id === action.payload.id ? action.payload : t) };
-    case 'DELETE_LIABILITY_TYPE':
-      return { ...state, liabilityTypes: (state.liabilityTypes||[]).filter(t => t.id !== action.payload) };
+    case 'ADD_LIABILITY_TYPE':    return { ...state, liabilityTypes: [...(state.liabilityTypes || []), action.payload] };
+    case 'UPDATE_LIABILITY_TYPE': return { ...state, liabilityTypes: (state.liabilityTypes || []).map(t => t.id === action.payload.id ? action.payload : t) };
+    case 'DELETE_LIABILITY_TYPE': return { ...state, liabilityTypes: (state.liabilityTypes || []).filter(t => t.id !== action.payload) };
 
     // ── Budgets ──
-    case 'ADD_BUDGET':
-      return { ...state, budgets: [...state.budgets, action.payload] };
-    case 'UPDATE_BUDGET':
-      return { ...state, budgets: state.budgets.map(b => b.id === action.payload.id ? action.payload : b) };
-    case 'DELETE_BUDGET':
-      return { ...state, budgets: state.budgets.filter(b => b.id !== action.payload) };
+    case 'ADD_BUDGET':    return { ...state, budgets: [...state.budgets, action.payload] };
+    case 'UPDATE_BUDGET': return { ...state, budgets: state.budgets.map(b => b.id === action.payload.id ? action.payload : b) };
+    case 'DELETE_BUDGET': return { ...state, budgets: state.budgets.filter(b => b.id !== action.payload) };
 
     // ── Events ──
-    case 'ADD_EVENT':
-      return { ...state, events: [...state.events, action.payload] };
-    case 'UPDATE_EVENT':
-      return { ...state, events: state.events.map(e => e.id === action.payload.id ? action.payload : e) };
-    case 'DELETE_EVENT':
-      return { ...state, events: state.events.filter(e => e.id !== action.payload) };
+    case 'ADD_EVENT':    return { ...state, events: [...state.events, action.payload] };
+    case 'UPDATE_EVENT': return { ...state, events: state.events.map(e => e.id === action.payload.id ? action.payload : e) };
+    case 'DELETE_EVENT': return { ...state, events: state.events.filter(e => e.id !== action.payload) };
 
     // ── Insurance ──
-    case 'ADD_INSURANCE':
-      return { ...state, insurance: [...state.insurance, action.payload] };
-    case 'UPDATE_INSURANCE':
-      return { ...state, insurance: state.insurance.map(i => i.id === action.payload.id ? action.payload : i) };
-    case 'DELETE_INSURANCE':
-      return { ...state, insurance: state.insurance.filter(i => i.id !== action.payload) };
+    case 'ADD_INSURANCE':    return { ...state, insurance: [...state.insurance, action.payload] };
+    case 'UPDATE_INSURANCE': return { ...state, insurance: state.insurance.map(i => i.id === action.payload.id ? action.payload : i) };
+    case 'DELETE_INSURANCE': return { ...state, insurance: state.insurance.filter(i => i.id !== action.payload) };
 
     // ── Expense Categories ──
-    case 'ADD_EXPENSE_CATEGORY':
-      return { ...state, expenseCategories: [...state.expenseCategories, action.payload] };
-    case 'UPDATE_EXPENSE_CATEGORY':
-      return { ...state, expenseCategories: state.expenseCategories.map(c => c.id === action.payload.id ? action.payload : c) };
-    case 'DELETE_EXPENSE_CATEGORY':
-      return { ...state, expenseCategories: state.expenseCategories.filter(c => c.id !== action.payload) };
+    case 'ADD_EXPENSE_CATEGORY':    return { ...state, expenseCategories: [...state.expenseCategories, action.payload] };
+    case 'UPDATE_EXPENSE_CATEGORY': return { ...state, expenseCategories: state.expenseCategories.map(c => c.id === action.payload.id ? action.payload : c) };
+    case 'DELETE_EXPENSE_CATEGORY': return { ...state, expenseCategories: state.expenseCategories.filter(c => c.id !== action.payload) };
 
     // ── Income Categories ──
-    case 'ADD_INCOME_CATEGORY':
-      return { ...state, incomeCategories: [...state.incomeCategories, action.payload] };
-    case 'UPDATE_INCOME_CATEGORY':
-      return { ...state, incomeCategories: state.incomeCategories.map(c => c.id === action.payload.id ? action.payload : c) };
-    case 'DELETE_INCOME_CATEGORY':
-      return { ...state, incomeCategories: state.incomeCategories.filter(c => c.id !== action.payload) };
+    case 'ADD_INCOME_CATEGORY':    return { ...state, incomeCategories: [...state.incomeCategories, action.payload] };
+    case 'UPDATE_INCOME_CATEGORY': return { ...state, incomeCategories: state.incomeCategories.map(c => c.id === action.payload.id ? action.payload : c) };
+    case 'DELETE_INCOME_CATEGORY': return { ...state, incomeCategories: state.incomeCategories.filter(c => c.id !== action.payload) };
 
     // ── Groups ──
-    case 'ADD_GROUP':
-      return { ...state, groups: [...state.groups, action.payload] };
-    case 'UPDATE_GROUP':
-      return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? action.payload : g) };
-    case 'DELETE_GROUP':
-      return { ...state, groups: state.groups.filter(g => g.id !== action.payload) };
+    case 'ADD_GROUP':    return { ...state, groups: [...state.groups, action.payload] };
+    case 'UPDATE_GROUP': return { ...state, groups: state.groups.map(g => g.id === action.payload.id ? action.payload : g) };
+    case 'DELETE_GROUP': return { ...state, groups: state.groups.filter(g => g.id !== action.payload) };
 
     // ── Settings ──
-    case 'UPDATE_HOUSEHOLD':
-      return { ...state, household: { ...state.household, ...action.payload } };
+    case 'UPDATE_HOUSEHOLD': return { ...state, household: { ...state.household, ...action.payload } };
 
     default: return state;
   }
