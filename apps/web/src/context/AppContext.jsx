@@ -7,8 +7,9 @@ import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_GROUPS }
 
 const AppContext = createContext(null);
 
+import { getDriveAuth, disconnectDrive } from '../utils/googleDriveSync';
+
 const USERS_KEY = 'a1_users';
-const AUTH_KEY  = 'a1_auth';
 const DATA_KEY  = 'a1_data';
 
 // ── Default Asset Types ──
@@ -213,47 +214,42 @@ function reducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, initialState);
-  const [currentUser, setCurrentUser] = React.useState(() => {
-    try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; }
-  });
+  const [currentUser, setCurrentUser] = React.useState(() => getDriveAuth());
 
   useEffect(() => {
     localStorage.setItem(DATA_KEY, JSON.stringify(state));
   }, [state]);
 
-  const login = (email, password) => {
-    const users = loadUsers();
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      const { password: _, ...safeUser } = user;
-      localStorage.setItem(AUTH_KEY, JSON.stringify(safeUser));
-      setCurrentUser(safeUser);
-      return { ok: true };
-    }
-    return { ok: false, error: 'Invalid email or password.' };
-  };
-
-  const register = (name, email, password) => {
-    const users = loadUsers();
-    if (users.find(u => u.email === email)) return { ok: false, error: 'Email already registered.' };
-    const newUser = { id: `user-${Date.now()}`, name, email, password, role: 'member', avatar: name.slice(0, 2).toUpperCase() };
-    users.push(newUser);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    const { password: _, ...safeUser } = newUser;
-    localStorage.setItem(AUTH_KEY, JSON.stringify(safeUser));
-    setCurrentUser(safeUser);
-    return { ok: true };
+  const loginWithGoogle = (authData) => {
+    setCurrentUser(authData);
   };
 
   const logout = () => {
-    localStorage.removeItem(AUTH_KEY);
+    disconnectDrive();
     setCurrentUser(null);
+  };
+
+  const getUsers = () => loadUsers();
+
+  const updateUser = (id, data) => {
+    const users = loadUsers();
+    const updated = users.map(u => u.id === id ? { ...u, ...data } : u);
+    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
+  };
+
+  const deleteUser = (id) => {
+    const users = loadUsers();
+    const updated = users.filter(u => u.id !== id);
+    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
   };
 
   const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   return (
-    <AppContext.Provider value={{ state, dispatch, currentUser, login, register, logout, uid }}>
+    <AppContext.Provider value={{ 
+      state, dispatch, currentUser, loginWithGoogle, logout, 
+      getUsers, updateUser, deleteUser, uid 
+    }}>
       {children}
     </AppContext.Provider>
   );

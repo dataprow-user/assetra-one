@@ -6,6 +6,7 @@ import {
   FileJson, FileSpreadsheet, FileText, Shield, CloudUpload, FolderOpen, Loader2
 } from 'lucide-react';
 import Modal from '../components/Modal';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { exportJSON, exportExcel, exportCSV, buildPayload, getExportBlob } from '../utils/exportData';
 import {
   SCHEDULE_OPTIONS, getBackupSchedule, setBackupSchedule,
@@ -13,37 +14,95 @@ import {
   getSyncFormat, setSyncFormat
 } from '../utils/backupSchedule';
 import {
-  getDriveAuth, connectGoogleDrive, disconnectDrive, uploadToDrive
+  uploadToDrive, downloadLatestBackup
 } from '../utils/googleDriveSync';
 import './Settings.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { state, dispatch, currentUser, logout } = useApp();
-
+  const {
+    state, dispatch, currentUser, logout,
+    getUsers, register, updateUser, deleteUser
+  } = useApp();
+  
   const [householdName, setHouseholdName] = useState(state.household?.name || '');
   const [saved,         setSaved]         = useState(false);
   const [toast,         setToast]         = useState(null);
-  const [modal,         setModal]         = useState(null); // 'export'|'reset'|'sample'|'import-confirm'|'folder-picker'
+  const [modal,         setModal]         = useState(null); // 'export'|'reset'|'sample'|'import-confirm'|'privacy-policy'|'member-form'
   const [importData,    setImportData]    = useState(null);
   
+  const [memberList,    setMemberList]    = useState(getUsers());
+  const [editingMember, setEditingMember] = useState(null);
+  
   const [schedule,      setScheduleState] = useState(getBackupSchedule());
-  const [syncFmt,       setSyncFmtState]  = useState(getSyncFormat());
   
   const [lastBackup,    setLastBackup]    = useState(lastBackupLabel());
   
-  const [driveAuth,     setDriveAuth]     = useState(getDriveAuth());
   const [syncStatus,    setSyncStatus]    = useState(null); // null | 'syncing' | 'done' | 'error'
 
   const fileRef = useRef();
 
   const showToast = (type, msg) => {
     setToast({ type, msg });
-    setTimeout(() => setToast(null), 4500);
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
   };
 
-  // ── Household save ──────────────────────────────────────────────────────────
+  const openMemberModal = (m) => {
+    setEditingMember(m);
+    setModal('member-form');
+  };
+
+  const handleDeleteMember = (id) => {
+    // Prevent deleting the last admin
+    const admins = memberList.filter(u => u.role === 'admin');
+    const memberToDelete = memberList.find(u => u.id === id);
+    if (admins.length === 1 && memberToDelete?.role === 'admin') {
+      return alert('You cannot remove the only admin in the household.');
+    }
+
+    if (window.confirm('Remove this member? They will lose access to login.')) {
+      deleteUser(id);
+      setMemberList(getUsers());
+      showToast('success', 'Member removed.');
+    }
+  };
+
+  const handleMemberSubmit = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    
+    if (editingMember) {
+      // Prevent the last admin from demoting themselves
+      const admins = memberList.filter(u => u.role === 'admin');
+      if (admins.length === 1 && editingMember.role === 'admin' && data.role === 'member') {
+        return alert('You cannot demote the only admin. Please make someone else an admin first.');
+      }
+
+      if (data.password && data.password.length < 6) return alert('Password must be at least 6 characters.');
+      if (!data.password) delete data.password;
+      updateUser(editingMember.id, { ...data, avatar: data.name.slice(0, 2).toUpperCase() });
+      showToast('success', 'Member updated.');
+    } else {
+      if (data.password.length < 6) return alert('Password must be at least 6 characters.');
+      const res = register(data.name, data.email, data.password);
+      if (!res.ok) return alert(res.error);
+      if (data.role === 'admin') {
+         // newly registered user is member by default, so update if admin selected
+         const newUsers = getUsers();
+         const justAdded = newUsers.find(u => u.email === data.email);
+         if (justAdded) updateUser(justAdded.id, { role: 'admin' });
+      }
+      showToast('success', 'Member added.');
+    }
+    setMemberList(getUsers());
+    setModal(null);
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   const handleSave = (e) => {
     e.preventDefault();
     dispatch({ type: 'UPDATE_HOUSEHOLD', payload: { name: householdName } });
@@ -51,10 +110,30 @@ export default function Settings() {
   };
 
   // ── Reset / Sample ──────────────────────────────────────────────────────────
-  const handleReset = () => {
+  const handleReset = async () => {
     dispatch({ type: 'RESET_ALL' });
     setModal(null);
-    showToast('success', 'All data cleared. Starting fresh!');
+    showToast('success', 'All data cleared. Wiping cloud backup...');
+    if (currentUser) {
+      try {
+        const format = getSyncFormat();
+        const ext = format === 'excel' ? 'xlsx' : format;
+        const filename = `Assetra-Backup.${ext}`;
+        // Import emptyState from AppContext to generate empty payload
+        const emptyStateBlob = getExportBlob({
+          household: { name: 'My Household', currency: 'INR' },
+          accounts: [], transactions: [], assets: [], liabilities: [],
+          budgets: [], events: [], insurance: [],
+          expenseCategories: [], incomeCategories: [], groups: []
+        }, format);
+        await uploadToDrive(emptyStateBlob, filename);
+        setLastBackupTime();
+        setLastBackup(lastBackupLabel());
+        showToast('success', 'Cloud backup wiped successfully!');
+      } catch (e) {
+        showToast('error', 'Failed to wipe cloud backup: ' + e.message);
+      }
+    }
   };
   const handleLoadSample = () => {
     dispatch({ type: 'LOAD_SAMPLE_DATA' });
@@ -101,33 +180,16 @@ export default function Settings() {
   };
 
   // ── Google Drive Sync ───────────────────────────────────────────────────────
-  const handleConnectDrive = async () => {
-    try {
-      const auth = await connectGoogleDrive();
-      setDriveAuth(auth);
-      showToast('success', `Connected to Google Drive as ${auth.email}`);
-    } catch (e) {
-      showToast('error', e.message);
-    }
-  };
-
-  const handleDisconnectDrive = () => {
-    disconnectDrive();
-    setDriveAuth(null);
-    showToast('success', 'Google Drive disconnected.');
-  };
-
   const handleSyncNow = async () => {
-    if (!driveAuth) {
-      showToast('error', 'Please connect Google Drive first.');
+    if (!currentUser) {
+      showToast('error', 'Not connected to Google Drive.');
       return;
     }
     
     setSyncStatus('syncing');
     try {
-      const ext      = syncFmt === 'excel' ? 'xlsx' : syncFmt;
-      const filename = `Assetra-Backup.${ext}`;
-      const blob     = getExportBlob(state, syncFmt);
+      const filename = 'Assetra-Backup.json';
+      const blob     = getExportBlob(state, 'json');
       
       await uploadToDrive(blob, filename);
       
@@ -138,8 +200,8 @@ export default function Settings() {
       setTimeout(() => setSyncStatus(null), 3000);
     } catch (e) {
       if (e.message === 'AUTH_EXPIRED') {
-        handleDisconnectDrive();
-        showToast('error', 'Google Drive connection expired. Please reconnect.');
+        logout();
+        showToast('error', 'Session expired. Please sign in again.');
       } else {
         showToast('error', 'Upload failed: ' + e.message);
       }
@@ -149,15 +211,8 @@ export default function Settings() {
   };
 
   const handleScheduleChange = (val) => {
-    setBackupSchedule(val); setScheduleState(val);
-    showToast('success', val === 'off' ? 'Auto backup disabled.' : `Auto backup set to ${val}.`);
-  };
-
-  const handleFormatChange = (e) => {
-    const val = e.target.value;
-    setSyncFormat(val);
-    setSyncFmtState(val);
-    showToast('success', `Cloud sync format changed to ${val.toUpperCase()}`);
+    setScheduleState(val);
+    setBackupSchedule(val);
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -209,9 +264,14 @@ export default function Settings() {
                 style={{ marginTop:6, display:'inline-flex' }}>{currentUser?.role}</span>
             </div>
           </div>
-          <button className="btn btn-danger" style={{ marginTop:20 }} onClick={logout}>
-            <LogOut size={15}/> Sign Out
-          </button>
+          <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+            <button className="btn btn-danger" onClick={logout}>
+              <LogOut size={15}/> Sign Out
+            </button>
+            <button className="btn btn-ghost" onClick={() => setModal('privacy-policy')}>
+              Privacy Policy
+            </button>
+          </div>
         </div>
 
         {/* ── Export & Import ─────────────────────────────────────────── full */}
@@ -258,63 +318,38 @@ export default function Settings() {
 
           {/* Folder status */}
           <div className="folder-status-row">
-            {driveAuth ? (
-              <div className="folder-connected">
-                {driveAuth.picture ? (
-                  <img src={driveAuth.picture} alt="profile" style={{width: 40, height: 40, borderRadius: '50%'}} />
-                ) : (
-                  <CheckCircle2 size={32} style={{ color:'var(--green)' }}/>
-                )}
-                <div style={{ flex: 1 }}>
-                  <div className="folder-name">{driveAuth.name}</div>
-                  <div className="folder-meta">{driveAuth.email}</div>
-                </div>
-                
-                <div style={{ display:'flex', gap:8 }}>
-                  <button className="btn btn-primary btn-sm"
-                    disabled={syncStatus === 'syncing'}
-                    onClick={handleSyncNow}>
-                    {syncStatus === 'syncing' ? '⏳ Uploading…'
-                      : syncStatus === 'done'  ? '✅ Done'
-                      : <><CloudUpload size={14}/> Sync Now</>}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={handleDisconnectDrive}>
-                    Disconnect
-                  </button>
-                </div>
+            <div className="folder-connected">
+              {currentUser.picture ? (
+                <img src={currentUser.picture} alt="profile" style={{width: 40, height: 40, borderRadius: '50%'}} />
+              ) : (
+                <CheckCircle2 size={32} style={{ color:'var(--green)' }}/>
+              )}
+              <div style={{ flex: 1 }}>
+                <div className="folder-name">{currentUser.name}</div>
+                <div className="folder-meta">{currentUser.email}</div>
               </div>
-            ) : (
-              <button className="data-action-btn folder-choose-btn" onClick={handleConnectDrive}>
-                <div className="dab-icon" style={{ background:'rgba(16,185,129,0.15)', color:'var(--green)' }}>
-                  <CloudUpload size={22}/>
-                </div>
-                <div>
-                  <div className="dab-title">Connect Google Drive</div>
-                  <div className="dab-desc">Sign in securely with Google to enable cloud backups</div>
-                </div>
-              </button>
-            )}
+              
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-primary btn-sm"
+                  disabled={syncStatus === 'syncing'}
+                  onClick={handleSyncNow}>
+                  {syncStatus === 'syncing' ? '⏳ Uploading…'
+                    : syncStatus === 'done'  ? '✅ Done'
+                    : <><CloudUpload size={14}/> Sync Now</>}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Preferences */}
-          {driveAuth && (
-            <div className="sync-preferences">
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>Target Folder</label>
-                <div className="input" style={{ display: 'flex', alignItems: 'center', background: 'var(--panel-hover)', color: 'var(--text-1)' }}>
-                  <FolderOpen size={16} style={{ marginRight: 8, color: 'var(--accent-light)' }}/> AssetraBackups
-                </div>
-              </div>
-              <div className="form-group" style={{ width: 180 }}>
-                <label>Backup Format</label>
-                <select className="input" value={syncFmt} onChange={handleFormatChange}>
-                  <option value="json">JSON (Restorable)</option>
-                  <option value="excel">Excel (.xlsx)</option>
-                  <option value="csv">CSV (Transactions)</option>
-                </select>
+          <div className="sync-preferences">
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Target Folder</label>
+              <div className="input" style={{ display: 'flex', alignItems: 'center', background: 'var(--panel-hover)', color: 'var(--text-1)' }}>
+                <FolderOpen size={16} style={{ marginRight: 8, color: 'var(--accent-light)' }}/> AssetraBackups
               </div>
             </div>
-          )}
+          </div>
 
           {/* Schedule */}
           <div className="schedule-section">
@@ -338,7 +373,7 @@ export default function Settings() {
             {schedule !== 'off' && (
               <div className="schedule-note">
                 <CheckCircle2 size={13} style={{ color:'var(--green)', flexShrink:0 }}/>
-                {driveAuth
+                {currentUser
                   ? `Auto backup active (${schedule}) — files will be silently uploaded to "AssetraBackups" in Google Drive when due.`
                   : `Schedule set to ${schedule}, but Google Drive is not connected. A manual download prompt will appear when backup is due.`}
               </div>
@@ -348,17 +383,38 @@ export default function Settings() {
 
         {/* ── Members ───────────────────────────────────────────────────── */}
         <div className="section-box">
-          <div className="section-title">Family Members</div>
-          {(state.household?.members || []).length === 0
+          <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            Family Members
+            {currentUser?.role === 'admin' && (
+              <button className="btn btn-secondary btn-sm" onClick={() => openMemberModal(null)}>Add Member</button>
+            )}
+          </div>
+          
+          {memberList.length === 0
             ? <p style={{ color:'var(--text-2)', fontSize:'0.88rem' }}>No members added yet.</p>
-            : (state.household?.members || []).map(m => (
-              <div key={m.id} className="member-row">
-                <div className="mem-avatar">{m.avatar}</div>
+            : memberList.map(m => (
+              <div key={m.id} className="member-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                <div className="mem-avatar" style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--panel-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'var(--accent-light)' }}>
+                  {m.avatar}
+                </div>
                 <div style={{ flex:1 }}>
-                  <div className="mem-name">{m.name}</div>
-                  <div className="mem-email">{m.email}</div>
+                  <div className="mem-name" style={{ fontWeight: 600, fontSize: '0.95rem' }}>{m.name}</div>
+                  <div className="mem-email" style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>{m.email}</div>
                 </div>
                 <span className={`badge ${m.role==='admin'?'badge-purple':'badge-gray'}`}>{m.role}</span>
+                
+                {(currentUser?.role === 'admin' || currentUser?.id === m.id) && (
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
+                    <button className="act-btn edit" onClick={() => openMemberModal(m)} title="Edit Member">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    {m.id !== currentUser?.id && currentUser?.role === 'admin' && (
+                      <button className="act-btn delete" onClick={() => handleDeleteMember(m.id)} title="Remove Member">
+                        <Trash2 size={15}/>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           }
@@ -466,6 +522,39 @@ export default function Settings() {
         </Modal>
       )}
 
+      {/* Member Form Modal */}
+      {modal === 'member-form' && (
+        <Modal title={editingMember ? 'Edit Member' : 'Add Member'} onClose={() => setModal(null)} size="sm">
+          <form onSubmit={handleMemberSubmit}>
+            <div className="form-group">
+              <label>Full Name</label>
+              <input className="input" name="name" required defaultValue={editingMember?.name || ''} />
+            </div>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input className="input" type="email" name="email" required defaultValue={editingMember?.email || ''} readOnly={!!editingMember} style={editingMember ? { background: 'var(--panel-hover)', color: 'var(--text-2)' } : {}}/>
+            </div>
+            <div className="form-group">
+              <label>{editingMember ? 'New Password (leave blank to keep current)' : 'Password'}</label>
+              <input className="input" type="password" name="password" minLength={editingMember ? undefined : 6} required={!editingMember} />
+            </div>
+            <div className="form-group">
+              <label>Role</label>
+              <select className="input" name="role" defaultValue={editingMember?.role || 'member'} disabled={currentUser?.role !== 'admin' && !(!memberList.find(u => u.role === 'admin'))}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">{editingMember ? 'Save Changes' : 'Add Member'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Privacy Policy */}
+      {modal === 'privacy-policy' && <PrivacyPolicyModal onClose={() => setModal(null)} />}
     </div>
   );
 }

@@ -1,135 +1,42 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CheckCircle, ArrowLeft } from 'lucide-react';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
+import { connectGoogleDrive, downloadLatestBackup } from '../utils/googleDriveSync';
+import { trackUserEvent } from '../utils/userTracker';
 import './Login.css';
 
-const USERS_KEY = 'a1_users';
-
-function loadUsers() {
-  try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch { return []; }
-}
-
-// ---------- Forgot Password sub-view ----------
-function ForgotPassword({ onBack }) {
-  const [step, setStep] = useState(1); // 1 = enter email, 2 = set new password, 3 = done
-  const [email, setEmail] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
-  const [error, setError] = useState('');
-
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    setError('');
-    const users = loadUsers();
-    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) {
-      setError('No account found with that email address.');
-      return;
-    }
-    setStep(2);
-  };
-
-  const handleResetSubmit = (e) => {
-    e.preventDefault();
-    setError('');
-    if (newPwd.length < 6) { setError('Password must be at least 6 characters.'); return; }
-    if (newPwd !== confirmPwd) { setError('Passwords do not match.'); return; }
-    const users = loadUsers();
-    const updated = users.map(u =>
-      u.email.toLowerCase() === email.toLowerCase() ? { ...u, password: newPwd } : u
-    );
-    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
-    setStep(3);
-  };
-
-  return (
-    <div className="auth-box">
-      <button className="back-btn" onClick={onBack}>
-        <ArrowLeft size={16} /> Back to Sign In
-      </button>
-
-      {step === 1 && (
-        <>
-          <div className="auth-box-header">
-            <h2>Reset Password</h2>
-            <p>Enter the email address you used to sign up and we'll let you set a new password.</p>
-          </div>
-          <form onSubmit={handleEmailSubmit} className="auth-form">
-            <div className="form-group">
-              <label>Email Address</label>
-              <input className="input" type="email" required placeholder="you@family.com"
-                value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
-            {error && <div className="auth-error">{error}</div>}
-            <button type="submit" className="btn btn-primary auth-submit">Continue</button>
-          </form>
-          <div className="auth-info-box">
-            <strong>ℹ️ Note:</strong> Since this app stores data locally in your browser, your account
-            data (transactions, assets etc.) is still safe. You're only resetting your login password.
-          </div>
-        </>
-      )}
-
-      {step === 2 && (
-        <>
-          <div className="auth-box-header">
-            <h2>Set New Password</h2>
-            <p>Account found for <strong>{email}</strong>. Enter your new password below.</p>
-          </div>
-          <form onSubmit={handleResetSubmit} className="auth-form">
-            <div className="form-group">
-              <label>New Password</label>
-              <input className="input" type="password" required minLength={6} placeholder="Min. 6 characters"
-                value={newPwd} onChange={e => setNewPwd(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input className="input" type="password" required placeholder="Re-enter password"
-                value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} />
-            </div>
-            {error && <div className="auth-error">{error}</div>}
-            <button type="submit" className="btn btn-primary auth-submit">Reset Password</button>
-          </form>
-        </>
-      )}
-
-      {step === 3 && (
-        <div className="reset-success">
-          <CheckCircle size={56} className="success-icon" />
-          <h2>Password Reset!</h2>
-          <p>Your password has been updated successfully. You can now sign in with your new password.</p>
-          <button className="btn btn-primary auth-submit" onClick={onBack}>Go to Sign In</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- Main Login component ----------
 export default function Login() {
-  const { login, register } = useApp();
-  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const { loginWithGoogle, dispatch } = useApp();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    let result;
-    if (mode === 'login') {
-      result = login(form.email, form.password);
-    } else {
-      if (!form.name.trim()) { setError('Name is required.'); setLoading(false); return; }
-      if (form.password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return; }
-      result = register(form.name, form.email, form.password);
+    try {
+      // 1. Authenticate with Google Drive
+      const auth = await connectGoogleDrive();
+      
+      // 2. Try to pull existing data instantly
+      try {
+        const cloudData = await downloadLatestBackup('Assetra-Backup.json');
+        if (cloudData && (cloudData.transactions || cloudData.assets)) {
+          dispatch({ type: 'IMPORT_DATA', payload: cloudData });
+        }
+      } catch (pullError) {
+        // If they have no backup yet, that's fine, they start fresh!
+        console.log('No backup found or failed to pull on login', pullError);
+      }
+
+      // 3. Log them into the app
+      loginWithGoogle(auth);
+      trackUserEvent(auth.name, auth.email, 'Google Drive Login');
+
+    } catch (e) {
+      setError(e.message);
+      setLoading(false);
     }
-    if (!result.ok) setError(result.error);
-    setLoading(false);
   };
 
   return (
@@ -141,7 +48,7 @@ export default function Login() {
           <h1>Assetra One</h1>
           <p className="auth-tagline">Your Family's Complete<br />Financial Command Center</p>
           <div className="auth-features">
-            {['Track Assets & Liabilities', 'Manage Family Budgets', 'Monitor Investments & Gold', 'EMI & Insurance Alerts'].map(f => (
+            {['Track Assets & Liabilities', 'Manage Family Budgets', 'Monitor Investments & Gold', 'Seamless Cloud Syncing'].map(f => (
               <div key={f} className="auth-feature-item">
                 <span className="dot" />
                 {f}
@@ -150,8 +57,8 @@ export default function Login() {
           </div>
 
           <div className="storage-notice">
-            <div className="storage-notice-title">📦 Where is your data stored?</div>
-            <p>All your data (accounts, assets, transactions) is securely stored in <strong>your browser's localStorage</strong> on this device. No data is sent to any server.</p>
+            <div className="storage-notice-title">☁️ Secure Cloud Sync</div>
+            <p>Your data is synced directly to your personal <strong>Google Drive</strong>. You are the only person who has access to your financial data.</p>
           </div>
         </div>
         <div className="auth-orb orb1" />
@@ -160,61 +67,48 @@ export default function Login() {
 
       {/* Right form panel */}
       <div className="auth-form-side">
-        {mode === 'forgot' ? (
-          <ForgotPassword onBack={() => { setMode('login'); setError(''); }} />
-        ) : (
-          <div className="auth-box">
-            <div className="auth-box-header">
-              <h2>{mode === 'login' ? 'Welcome back' : 'Create account'}</h2>
-              <p>{mode === 'login' ? 'Sign in to your family account.' : 'Join your household on Assetra One.'}</p>
-            </div>
+        <div className="auth-box">
+          <div className="auth-box-header">
+            <h2>Welcome to Assetra</h2>
+            <p>Sign in securely with Google to sync your household data across all your devices.</p>
+          </div>
 
-            <div className="auth-demo-hint">
-              <span>Demo:</span> ravi@kumar.family / password123
-            </div>
-
-            <form onSubmit={handleSubmit} className="auth-form">
-              {mode === 'register' && (
-                <div className="form-group">
-                  <label>Full Name</label>
-                  <input className="input" type="text" placeholder="Ravi Kumar" value={form.name} onChange={set('name')} />
-                </div>
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+            {error && <div className="auth-error" style={{ width: '100%' }}>{error}</div>}
+            
+            <button 
+              className="btn btn-primary auth-submit" 
+              onClick={handleGoogleLogin} 
+              disabled={loading}
+              style={{ padding: '16px 24px', fontSize: '1.1rem', display: 'flex', gap: '12px', justifyContent: 'center' }}
+            >
+              {loading ? (
+                <span>Syncing your data...</span>
+              ) : (
+                <>
+                  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.16v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.16C1.43 8.55 1 10.22 1 12s.43 3.45 1.16 4.93l2.85-2.22.83-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.16 7.07l3.68 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Continue with Google Drive
+                </>
               )}
-              <div className="form-group">
-                <label>Email Address</label>
-                <input className="input" type="email" required placeholder="you@family.com" value={form.email} onChange={set('email')} />
-              </div>
-              <div className="form-group">
-                <div className="label-row">
-                  <label>Password</label>
-                  {mode === 'login' && (
-                    <button type="button" className="forgot-link"
-                      onClick={() => { setMode('forgot'); setError(''); setForm({ name: '', email: '', password: '' }); }}>
-                      Forgot password?
-                    </button>
-                  )}
-                </div>
-                <input className="input" type="password" required placeholder="••••••••" minLength={6}
-                  value={form.password} onChange={set('password')} />
-              </div>
-
-              {error && <div className="auth-error">{error}</div>}
-
-              <button type="submit" className="btn btn-primary auth-submit" disabled={loading}>
-                {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
-              </button>
-            </form>
-
-            <p className="auth-switch">
-              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
-              {' '}
-              <button onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(''); }}>
-                {mode === 'login' ? 'Sign up' : 'Sign in'}
-              </button>
+            </button>
+            
+            <p style={{ color: 'var(--text-2)', fontSize: '0.85rem', textAlign: 'center', marginTop: '1rem' }}>
+              We request access to a specific folder in your Drive to backup and restore your financial data. We cannot see your other files.
             </p>
           </div>
-        )}
+
+          <div style={{ textAlign: 'center', marginTop: 32, fontSize: '0.8rem' }}>
+            <button className="forgot-link" onClick={() => setShowPrivacy(true)}>View Privacy Policy</button>
+          </div>
+        </div>
       </div>
+
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 }

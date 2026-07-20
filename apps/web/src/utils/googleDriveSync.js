@@ -5,6 +5,8 @@
  * Uses Google Identity Services (GSI) for authentication.
  */
 
+import { trackUserEvent } from './userTracker';
+
 const STORAGE_KEY = 'a1_gdrive_auth';
 
 // ── Authentication ─────────────────────────────────────────────────────────────
@@ -48,6 +50,13 @@ export function connectGoogleDrive() {
               picture: userInfo.picture,
             };
             saveDriveAuth(authData);
+            
+            // Only log them once per browser session/device to avoid spamming the sheet
+            if (!localStorage.getItem('a1_gdrive_logged')) {
+              trackUserEvent(userInfo.name, userInfo.email, 'Connected Google Drive');
+              localStorage.setItem('a1_gdrive_logged', 'true');
+            }
+            
             resolve(authData);
           } catch (err) {
             reject(new Error('Failed to fetch user profile: ' + err.message));
@@ -162,6 +171,55 @@ export async function uploadToDrive(fileBlob, filename) {
     const errorText = await res.text();
     throw new Error('Upload failed: ' + errorText);
   }
+
+  return res.json();
+}
+
+/**
+ * Gets the modification time of a file in the AssetraBackups folder.
+ * Returns the ISO string of modifiedTime or null if not found.
+ */
+export async function getCloudModificationTime(filename) {
+  const auth = getDriveAuth();
+  if (!auth) return null;
+
+  try {
+    const folderId = await getOrCreateFolder();
+    const query = `'${folderId}' in parents and name='${filename}' and trashed=false`;
+    const data = await driveApi(`files?q=${encodeURIComponent(query)}&fields=files(id,modifiedTime)&t=${Date.now()}`);
+    
+    if (data.files && data.files.length > 0) {
+      return data.files[0].modifiedTime;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to get cloud modification time', err);
+    return null;
+  }
+}
+
+/**
+ * Downloads the JSON content of a file from the AssetraBackups folder.
+ */
+export async function downloadLatestBackup(filename) {
+  const auth = getDriveAuth();
+  if (!auth) throw new Error('Not connected to Google Drive.');
+
+  const folderId = await getOrCreateFolder();
+  const fileId = await findExistingFile(filename, folderId);
+  
+  if (!fileId) throw new Error('Backup file not found in Google Drive.');
+
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&t=${Date.now()}`, {
+    headers: { 
+      Authorization: `Bearer ${auth.accessToken}`,
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    },
+    cache: 'no-store'
+  });
+
+  if (res.status === 401) throw new Error('AUTH_EXPIRED');
+  if (!res.ok) throw new Error('Failed to download backup data.');
 
   return res.json();
 }

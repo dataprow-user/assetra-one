@@ -13,8 +13,8 @@ import Settings from './pages/Settings';
 import CategoryManager from './pages/CategoryManager';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import { isBackupDue, setLastBackupTime, getBackupSchedule, getSyncFormat } from './utils/backupSchedule';
-import { getDriveAuth, uploadToDrive } from './utils/googleDriveSync';
+import { isBackupDue, setLastBackupTime, getBackupSchedule, getSyncFormat, getLastBackupTime } from './utils/backupSchedule';
+import { getDriveAuth, uploadToDrive, getCloudModificationTime, downloadLatestBackup } from './utils/googleDriveSync';
 import { getExportBlob, buildPayload } from './utils/exportData';
 import './App.css';
 
@@ -95,8 +95,102 @@ function BackupBanner({ state }) {
   );
 }
 
+// ── Background Cloud Sync Manager ──
+function CloudSyncManager({ state, dispatch }) {
+  const [syncing, setSyncing] = useState(false);
+  const [pushing, setPushing] = useState(false);
+
+  // 1. Auto-Pull (Check cloud on mount)
+  useEffect(() => {
+    const auth = getDriveAuth();
+    if (!auth) return;
+
+    const checkCloud = async () => {
+      try {
+        const filename = 'Assetra-Backup.json';
+        const cloudTimeStr = await getCloudModificationTime(filename);
+        if (!cloudTimeStr) return;
+
+        const cloudTime = new Date(cloudTimeStr).getTime();
+        const localLastStr = getLastBackupTime();
+        const localTime = localLastStr ? new Date(localLastStr).getTime() : 0;
+
+        if (cloudTime > localTime + 10000) {
+          setSyncing(true);
+          const cloudData = await downloadLatestBackup(filename);
+          
+          if (cloudData) {
+            const txCount = cloudData.transactions?.length || 0;
+            const assetCount = cloudData.assets?.length || 0;
+            const accCount = cloudData.accounts?.length || 0;
+            
+            if (txCount > 0 || assetCount > 0 || accCount > 0) {
+              dispatch({ type: 'IMPORT_DATA', payload: cloudData });
+              setLastBackupTime();
+              setTimeout(() => setSyncing(false), 3000);
+            } else {
+              setSyncing(false);
+              console.warn('Cloud sync pulled empty data!', cloudData);
+            }
+          } else {
+            setSyncing(false);
+          }
+        }
+      } catch (err) {
+        console.error('Background cloud pull failed', err);
+        setSyncing(false);
+      }
+    };
+    checkCloud();
+  }, [dispatch]);
+
+  // 2. Auto-Push (Debounced upload on state change)
+  useEffect(() => {
+    const auth = getDriveAuth();
+    if (!auth) return;
+
+    // We skip pushing if we are syncing.
+    // Also, as a safety check, never auto-push if the state is completely empty 
+    // (no transactions, no assets, no accounts).
+    const isEmpty = (!state.transactions || state.transactions.length === 0) &&
+                    (!state.assets || state.assets.length === 0) &&
+                    (!state.accounts || state.accounts.length === 0);
+
+    if (syncing || isEmpty) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setPushing(true);
+        // Force JSON for cloud sync so it can always be restored
+        const blob = getExportBlob(state, 'json');
+        const filename = 'Assetra-Backup.json';
+
+        await uploadToDrive(blob, filename);
+        setLastBackupTime(); // update local time to match what we pushed
+        setPushing(false);
+      } catch (e) {
+        console.error('Background cloud push failed', e);
+        setPushing(false);
+      }
+    }, 5000); // 5-second debounce
+
+    return () => clearTimeout(timer);
+  }, [state, syncing]);
+
+  if (!syncing && !pushing) return null;
+
+  return (
+    <div className={`backup-banner ${syncing ? 'synced' : ''}`} style={{ backgroundColor: syncing ? 'var(--accent-light)' : 'var(--panel-hover)', color: syncing ? '#fff' : 'var(--text-1)' }}>
+      <div className="backup-banner-content">
+        <span className="backup-banner-icon">☁️</span>
+        <div>{syncing ? 'Newer data found in Google Drive! Syncing to device...' : 'Saving changes to Google Drive...'}</div>
+      </div>
+    </div>
+  );
+}
+
 function AppShell() {
-  const { currentUser, state } = useApp();
+  const { currentUser, state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   if (!currentUser) return <Login />;
@@ -118,6 +212,7 @@ function AppShell() {
 
   return (
     <div className="app-shell">
+      <CloudSyncManager state={state} dispatch={dispatch} />
       <BackupBanner state={state} />
       <div className="app-shell-body">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
