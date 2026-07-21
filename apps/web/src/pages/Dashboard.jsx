@@ -7,6 +7,12 @@ import {
 import './Dashboard.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
+// Preserves the sign — fmt() alone hides negatives behind Math.abs(), which
+// made an overdrawn/negative balance render identically to a positive one.
+const fmtSigned = (n) => {
+  const num = Number(n) || 0;
+  return (num < 0 ? '-' : '') + fmt(num);
+};
 
 function StatCard({ title, value, sub, subColor, icon: Icon, iconColor }) {
   return (
@@ -58,8 +64,8 @@ export default function Dashboard() {
       </div>
 
       <div className="stats-grid">
-        <StatCard title="Net Worth" value={fmt(netWorth)} sub={netWorth >= 0 ? 'Positive net worth' : 'Negative net worth'} subColor={netWorth >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingUp} iconColor="var(--accent-light)" />
-        <StatCard title="Liquid Cash" value={fmt(liquidCash)} sub="Across all accounts" subColor="var(--text-2)" icon={Wallet} iconColor="var(--green)" />
+        <StatCard title="Net Worth" value={fmtSigned(netWorth)} sub={netWorth >= 0 ? 'Positive net worth' : 'Negative net worth'} subColor={netWorth >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingUp} iconColor="var(--accent-light)" />
+        <StatCard title="In Hand" value={fmtSigned(liquidCash)} sub="Across all accounts" subColor={liquidCash >= 0 ? 'var(--text-2)' : 'var(--red)'} icon={Wallet} iconColor="var(--green)" />
         <StatCard title="This Month Income" value={fmt(monthIncome)} sub="↑ Earnings" subColor="var(--green)" icon={ArrowDownRight} iconColor="var(--green)" />
         <StatCard title="This Month Expense" value={fmt(monthExpense)} sub={`Savings: ${fmt(monthIncome - monthExpense)}`} subColor={monthIncome - monthExpense >= 0 ? 'var(--green)' : 'var(--red)'} icon={ArrowUpRight} iconColor="var(--red)" />
       </div>

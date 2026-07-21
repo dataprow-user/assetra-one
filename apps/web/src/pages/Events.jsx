@@ -2,10 +2,16 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, CalendarDays, ChevronDown, ChevronRight, Receipt } from 'lucide-react';
+import { MAX_NAME_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Events.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
 const emptyForm = () => ({ name:'', startDate:'', endDate:'', budget:'' });
+
+const NUMERIC_RULES = {
+  budget: { label: 'Budget', min: 0, max: MAX_AMOUNT, required: false },
+};
 
 export default function Events() {
   const { state, dispatch, uid } = useApp();
@@ -13,14 +19,21 @@ export default function Events() {
   const [modal,    setModal]    = useState(null);
   const [form,     setForm]     = useState(emptyForm());
   const [expanded, setExpanded] = useState({});
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-  const openAdd  = ()   => { setForm(emptyForm()); setModal({ mode:'add' }); };
-  const openEdit = ev   => { setForm({ ...ev, budget: ev.budget||'' }); setModal({ mode:'edit', data:ev }); };
+  const set = k => e => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, [k]: val }));
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
+  };
+  const openAdd  = ()   => { setForm(emptyForm()); resetErrors(); setModal({ mode:'add' }); };
+  const openEdit = ev   => { setForm({ ...ev, budget: ev.budget||'' }); resetErrors(); setModal({ mode:'edit', data:ev }); };
   const toggle   = id   => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const payload = { ...form, budget: Number(form.budget) };
     if (modal.mode==='add') dispatch({ type:'ADD_EVENT',    payload:{ ...payload, id:uid() } });
     else                    dispatch({ type:'UPDATE_EVENT', payload:{ ...payload, id:modal.data.id } });
@@ -121,12 +134,16 @@ export default function Events() {
       {modal && (
         <Modal title={modal.mode==='add'?'Add Event':'Edit Event'} onClose={() => setModal(null)} size="sm">
           <form onSubmit={handleSubmit}>
-            <div className="form-group"><label>Event Name</label><input className="input" required placeholder="e.g. Goa Trip 2026" value={form.name} onChange={set('name')} /></div>
+            <div className="form-group"><label>Event Name</label><input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. Goa Trip 2026" value={form.name} onChange={set('name')} /></div>
             <div className="form-row">
               <div className="form-group"><label>Start Date</label><input className="input" type="date" value={form.startDate} onChange={set('startDate')} /></div>
               <div className="form-group"><label>End Date</label><input className="input" type="date" value={form.endDate} onChange={set('endDate')} /></div>
             </div>
-            <div className="form-group"><label>Budget (₹) <span style={{ color:'var(--text-3)',fontSize:'0.8rem' }}>(optional)</span></label><input className="input" type="number" min="0" placeholder="e.g. 50000" value={form.budget} onChange={set('budget')} /></div>
+            <div className="form-group">
+              <label>Budget (₹) <span style={{ color:'var(--text-3)',fontSize:'0.8rem' }}>(optional)</span></label>
+              <input className={`input ${errors.budget ? 'input-invalid' : ''}`} type="number" min="0" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} placeholder="e.g. 50000" value={form.budget} onChange={set('budget')} />
+              {errors.budget && <span className="field-error">{errors.budget}</span>}
+            </div>
             <p style={{ fontSize:'0.8rem',color:'var(--text-2)',marginTop:8 }}>💡 Tag transactions to this event using the "Event" field in Add Transaction.</p>
             <div style={{ display:'flex',gap:12,justifyContent:'flex-end',marginTop:12 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>

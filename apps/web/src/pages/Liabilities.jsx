@@ -3,12 +3,22 @@ import { useApp } from '../context/AppContext';
 import { DEFAULT_LIABILITY_TYPES } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, CreditCard, Settings2 } from 'lucide-react';
+import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, MAX_RATE, MAX_TENURE_MONTHS, blockInvalidNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Liabilities.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
 
 const emptyForm = () => ({ name:'', type:'home_loan', principal:'', interestRate:'', tenureMonths:'', emi:'', startDate:'', outstanding:'' });
 const emptyType = () => ({ label:'', color:'#f43f5e' });
+
+const NUMERIC_RULES = {
+  principal:     { label: 'Principal Amount', min: 1, max: MAX_AMOUNT },
+  interestRate:  { label: 'Interest Rate',     min: 0, max: MAX_RATE, maxDecimals: 2 },
+  tenureMonths:  { label: 'Tenure',            min: 1, max: MAX_TENURE_MONTHS, maxDecimals: 0 },
+  emi:           { label: 'EMI Amount',        min: 1, max: MAX_AMOUNT },
+  outstanding:   { label: 'Outstanding Balance', min: 0, max: MAX_AMOUNT },
+};
 
 export default function Liabilities() {
   const { state, dispatch, uid } = useApp();
@@ -22,14 +32,21 @@ export default function Liabilities() {
   const [typeModal, setTypeModal] = useState(null);
   const [form,      setForm]      = useState(emptyForm());
   const [typeForm,  setTypeForm]  = useState(emptyType());
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const set = k => e => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, [k]: val }));
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
+  };
 
-  const openAdd  = () => { setForm(emptyForm()); setModal({ mode:'add' }); };
-  const openEdit = l  => { setForm({ ...l }); setModal({ mode:'edit', data:l }); };
+  const openAdd  = () => { setForm(emptyForm()); resetErrors(); setModal({ mode:'add' }); };
+  const openEdit = l  => { setForm({ ...l }); resetErrors(); setModal({ mode:'edit', data:l }); };
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const payload = { ...form, principal:Number(form.principal), interestRate:Number(form.interestRate), tenureMonths:Number(form.tenureMonths), emi:Number(form.emi), outstanding:Number(form.outstanding) };
     if (modal.mode==='add') dispatch({ type:'ADD_LIABILITY',    payload:{ ...payload, id:uid() } });
     else                    dispatch({ type:'UPDATE_LIABILITY', payload:{ ...payload, id:modal.data.id } });
@@ -117,7 +134,7 @@ export default function Liabilities() {
         <Modal title={modal.mode==='add'?'Add Liability':'Edit Liability'} onClose={() => setModal(null)} size="lg">
           <form onSubmit={handleSubmit}>
             <div className="form-row">
-              <div className="form-group"><label>Loan Name</label><input className="input" required placeholder="e.g. SBI Home Loan" value={form.name} onChange={set('name')} /></div>
+              <div className="form-group"><label>Loan Name</label><input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. SBI Home Loan" value={form.name} onChange={set('name')} /></div>
               <div className="form-group">
                 <label>Type</label>
                 <select className="input" value={form.type} onChange={set('type')}>
@@ -126,16 +143,36 @@ export default function Liabilities() {
               </div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label>Principal Amount (₹)</label><input className="input" type="number" required min="1" value={form.principal} onChange={set('principal')} /></div>
-              <div className="form-group"><label>Interest Rate (% p.a.)</label><input className="input" type="number" required min="0" step="0.1" value={form.interestRate} onChange={set('interestRate')} /></div>
+              <div className="form-group">
+                <label>Principal Amount (₹)</label>
+                <input className={`input ${errors.principal ? 'input-invalid' : ''}`} type="number" required min="1" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} value={form.principal} onChange={set('principal')} />
+                {errors.principal && <span className="field-error">{errors.principal}</span>}
+              </div>
+              <div className="form-group">
+                <label>Interest Rate (% p.a.)</label>
+                <input className={`input ${errors.interestRate ? 'input-invalid' : ''}`} type="number" required min="0" max={MAX_RATE} step="0.1" onKeyDown={blockInvalidNumberKeys} value={form.interestRate} onChange={set('interestRate')} />
+                {errors.interestRate && <span className="field-error">{errors.interestRate}</span>}
+              </div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label>Tenure (months)</label><input className="input" type="number" required min="1" value={form.tenureMonths} onChange={set('tenureMonths')} /></div>
-              <div className="form-group"><label>EMI Amount (₹)</label><input className="input" type="number" required min="1" value={form.emi} onChange={set('emi')} /></div>
+              <div className="form-group">
+                <label>Tenure (months)</label>
+                <input className={`input ${errors.tenureMonths ? 'input-invalid' : ''}`} type="number" required min="1" max={MAX_TENURE_MONTHS} onKeyDown={blockInvalidNumberKeys} value={form.tenureMonths} onChange={set('tenureMonths')} />
+                {errors.tenureMonths && <span className="field-error">{errors.tenureMonths}</span>}
+              </div>
+              <div className="form-group">
+                <label>EMI Amount (₹)</label>
+                <input className={`input ${errors.emi ? 'input-invalid' : ''}`} type="number" required min="1" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} value={form.emi} onChange={set('emi')} />
+                {errors.emi && <span className="field-error">{errors.emi}</span>}
+              </div>
             </div>
             <div className="form-row">
               <div className="form-group"><label>Start Date</label><input className="input" type="date" value={form.startDate} onChange={set('startDate')} /></div>
-              <div className="form-group"><label>Outstanding Balance (₹)</label><input className="input" type="number" required min="0" value={form.outstanding} onChange={set('outstanding')} /></div>
+              <div className="form-group">
+                <label>Outstanding Balance (₹)</label>
+                <input className={`input ${errors.outstanding ? 'input-invalid' : ''}`} type="number" required min="0" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} value={form.outstanding} onChange={set('outstanding')} />
+                {errors.outstanding && <span className="field-error">{errors.outstanding}</span>}
+              </div>
             </div>
             <div style={{ display:'flex',gap:12,justifyContent:'flex-end',marginTop:8 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
@@ -166,7 +203,7 @@ export default function Liabilities() {
       {typeModal && typeModal!=='manage' && (
         <Modal title={typeModal.mode==='add'?'Add Liability Type':'Edit Type'} onClose={() => setTypeModal('manage')} size="sm">
           <form onSubmit={handleTypeSubmit}>
-            <div className="form-group"><label>Type Name</label><input className="input" required placeholder="e.g. Business Loan" value={typeForm.label} onChange={e => setTypeForm(f => ({...f, label:e.target.value}))} /></div>
+            <div className="form-group"><label>Type Name</label><input className="input" required maxLength={MAX_SHORT_LENGTH} placeholder="e.g. Business Loan" value={typeForm.label} onChange={e => setTypeForm(f => ({...f, label:e.target.value}))} /></div>
             <div className="form-group">
               <label>Color</label>
               <input type="color" value={typeForm.color.startsWith('var')?'#f43f5e':typeForm.color} onChange={e => setTypeForm(f => ({...f, color:e.target.value}))} style={{ width:48, height:36, borderRadius:8, border:'none', cursor:'pointer' }} />

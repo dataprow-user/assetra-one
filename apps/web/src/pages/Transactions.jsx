@@ -1,61 +1,31 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import Modal from '../components/Modal';
-import { Plus, Edit2, Trash2, Wallet } from 'lucide-react';
-import { DEFAULT_GROUPS } from '../data/categories';
+import TransactionFormModal from '../components/TransactionFormModal';
+import { Edit2, Trash2, Wallet, CheckCircle2, AlertTriangle } from 'lucide-react';
 import './Transactions.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
 
-const emptyForm = () => ({
-  date: new Date().toISOString().split('T')[0],
-  type: 'expense', group: '', category: '', subcategory: '',
-  amount: '', account: '', eventId: '', notes: '',
-});
+function goToAccounts() {
+  window.dispatchEvent(new CustomEvent('a1:navigate', { detail: 'accounts' }));
+}
 
-export default function Transactions() {
-  const { state, dispatch, uid } = useApp();
-  const { transactions, accounts, expenseCategories, incomeCategories, events = [] } = state;
-  const groups = (state.groups && state.groups.length > 0) ? state.groups : DEFAULT_GROUPS;
+export default function Transactions({ initialSearch = '' }) {
+  const { state, dispatch } = useApp();
+  const { transactions, accounts, expenseCategories, events = [] } = state;
 
-  const [modal,  setModal]  = useState(null);
-  const [form,   setForm]   = useState(emptyForm());
-  const [filter, setFilter] = useState({ type: 'all', search: '', group: '' });
+  const [modal,  setModal]  = useState(null); // null | { mode, data? }
+  const [filter, setFilter] = useState({ type: 'all', search: initialSearch, group: '' });
+  const [toast, setToast] = useState(null);
 
-  const activeCats     = form.type === 'income' ? incomeCategories : expenseCategories;
-  const selectedCat    = activeCats.find(c => c.name === form.category);
-  const subcatOptions  = selectedCat?.subcategories || [];
-  const expenseGroups  = [...new Set(expenseCategories.map(c => c.group))];
-
-  // Selected account info for live balance hint
-  const selectedAcc = accounts.find(a => a.id === form.account);
-
-  const set = k => e => {
-    const val = e.target.value;
-    setForm(f => {
-      const u = { ...f, [k]: val };
-      if (k === 'type')     { u.group = ''; u.category = ''; u.subcategory = ''; }
-      if (k === 'group')    { u.category = ''; u.subcategory = ''; }
-      if (k === 'category') {
-        u.subcategory = '';
-        const allCats = u.type === 'income' ? incomeCategories : expenseCategories;
-        const found = allCats.find(c => c.name === val);
-        if (found?.group) u.group = found.group;
-      }
-      return u;
-    });
+  const showToast = (type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
   };
 
-  const openAdd  = () => { setForm(emptyForm()); setModal({ mode: 'add' }); };
-  const openEdit = t  => { setForm({ ...t, eventId: t.eventId || '' }); setModal({ mode: 'edit', data: t }); };
+  const expenseGroups = [...new Set(expenseCategories.map(c => c.group))];
 
-  const handleSubmit = e => {
-    e.preventDefault();
-    const payload = { ...form, amount: Number(form.amount) };
-    if (modal.mode === 'add') dispatch({ type: 'ADD_TRANSACTION',    payload: { ...payload, id: uid() } });
-    else                      dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...payload, id: modal.data.id } });
-    setModal(null);
-  };
+  const openEdit = t => setModal({ mode: 'edit', data: t });
 
   const handleDelete = id => {
     if (window.confirm('Delete this transaction?')) dispatch({ type: 'DELETE_TRANSACTION', payload: id });
@@ -73,13 +43,15 @@ export default function Transactions() {
   const totalIncome  = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
-  // Live balance preview after this transaction
-  const liveAmt   = Number(form.amount) || 0;
-  const accBal    = Number(selectedAcc?.balance) || 0;
-  const afterBal  = form.type === 'income' ? accBal + liveAmt : accBal - liveAmt;
-
   return (
     <div className="animate-in">
+      {toast && (
+        <div className={`txn-toast ${toast.type}`}>
+          {toast.type === 'success' ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>}
+          {toast.msg}
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <div className="page-title">Transactions</div>
@@ -87,8 +59,15 @@ export default function Transactions() {
             {filtered.length} records &bull; Income: <span className="text-green">{fmt(totalIncome)}</span> &bull; Expenses: <span className="text-red">{fmt(totalExpense)}</span>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={openAdd}><Plus size={16}/> Add Transaction</button>
       </div>
+
+      {accounts.length === 0 && (
+        <div className="txn-account-notice">
+          <Wallet size={16}/>
+          <span>You don't have any accounts yet — add one first so transactions can track a real balance.</span>
+          <button className="btn btn-secondary btn-sm" onClick={goToAccounts}>Add Account</button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="txn-filters section-box" style={{ marginBottom: 20, padding: '14px 20px', flexWrap:'wrap', gap:12 }}>
@@ -150,93 +129,12 @@ export default function Transactions() {
 
       {/* Add / Edit Modal */}
       {modal && (
-        <Modal title={modal.mode==='add'?'Add Transaction':'Edit Transaction'} onClose={() => setModal(null)} size="lg">
-          <form onSubmit={handleSubmit}>
-            {/* Type + Date */}
-            <div className="form-row">
-              <div className="form-group">
-                <label>Type</label>
-                <select className="input" value={form.type} onChange={set('type')}>
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Date</label>
-                <input className="input" type="date" required value={form.date} onChange={set('date')} />
-              </div>
-            </div>
-
-            {/* Category — group auto-fills */}
-            <div className="form-group">
-              <label>Category</label>
-              <select className="input" required value={form.category} onChange={set('category')}>
-                <option value="">— Select Category —</option>
-                {activeCats.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-              {form.group && (
-                <span style={{ fontSize:'0.78rem', color:'var(--text-2)', marginTop:4, display:'block' }}>
-                  📁 Group: <strong style={{ color:'var(--accent-light)' }}>{form.group}</strong>
-                </span>
-              )}
-            </div>
-
-            {/* Subcategory */}
-            <div className="form-group">
-              <label>Sub-Category <span style={{ color:'var(--text-3)', fontSize:'0.8rem' }}>(optional)</span></label>
-              <select className="input" value={form.subcategory} onChange={set('subcategory')} disabled={subcatOptions.length===0}>
-                <option value="">— Select Sub-Category —</option>
-                {subcatOptions.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            {/* Amount + Account */}
-            <div className="form-row">
-              <div className="form-group">
-                <label>Amount (₹)</label>
-                <input className="input" type="number" required min="1" step="any" value={form.amount} onChange={set('amount')} />
-              </div>
-              <div className="form-group">
-                <label>Account</label>
-                <select className="input" value={form.account} onChange={set('account')}>
-                  <option value="">— Select Account —</option>
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({fmt(a.balance)})</option>)}
-                </select>
-                {/* Live balance preview */}
-                {selectedAcc && liveAmt > 0 && (
-                  <div className="acc-balance-hint">
-                    <Wallet size={12}/>
-                    <span>Current: <strong>{fmt(accBal)}</strong></span>
-                    <span className="hint-arrow">→</span>
-                    <span>After: <strong className={afterBal >= 0 ? 'text-green' : 'text-red'}>{fmt(afterBal)}</strong></span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Event link */}
-            {events.length > 0 && (
-              <div className="form-group">
-                <label>Link to Event <span style={{ color:'var(--text-3)', fontSize:'0.8rem' }}>(optional)</span></label>
-                <select className="input" value={form.eventId} onChange={set('eventId')}>
-                  <option value="">— No Event —</option>
-                  {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div className="form-group">
-              <label>Notes <span style={{ color:'var(--text-3)', fontSize:'0.8rem' }}>(optional)</span></label>
-              <input className="input" placeholder="Any extra detail..." value={form.notes} onChange={set('notes')} />
-            </div>
-
-            <div style={{ display:'flex', gap:12, justifyContent:'flex-end', marginTop:8 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">{modal.mode==='add'?'Add Transaction':'Update'}</button>
-            </div>
-          </form>
-        </Modal>
+        <TransactionFormModal
+          mode={modal.mode}
+          transaction={modal.data}
+          onClose={() => setModal(null)}
+          onError={msg => showToast('error', msg)}
+        />
       )}
     </div>
   );

@@ -7,8 +7,8 @@ const acc2 = 'acc-sbi-cc-002';
 const acc3 = 'acc-cash-003';
 
 export const SEED_USERS = [
-  { id: u1, name: 'Ravi Kumar', email: 'ravi@kumar.family', role: 'admin', avatar: 'RK' },
-  { id: u2, name: 'Priya Kumar', email: 'priya@kumar.family', role: 'member', avatar: 'PK' },
+  { id: u1, name: 'Ravi Kumar', relation: 'Self', avatar: 'RK' },
+  { id: u2, name: 'Priya Kumar', relation: 'Spouse', avatar: 'PK' },
 ];
 
 export const SEED_ACCOUNTS = [
@@ -29,7 +29,7 @@ export const SEED_LIABILITIES = [
 ];
 
 export const SEED_BUDGETS = [
-  { id: 'bud-001', name: 'Groceries', scope: 'category', category: 'Food', amount: 8000, spent: 6560, period: 'monthly', alertPct: 80 },
+  { id: 'bud-001', name: 'Groceries', scope: 'category', category: 'Groceries', amount: 8000, spent: 6560, period: 'monthly', alertPct: 80 },
   { id: 'bud-002', name: 'Entertainment', scope: 'category', category: 'Entertainment', amount: 3000, spent: 1200, period: 'monthly', alertPct: 80 },
   { id: 'bud-003', name: 'Goa Trip Budget', scope: 'event', category: null, amount: 60000, spent: 22400, period: 'one_time', alertPct: 80 },
 ];
@@ -45,11 +45,11 @@ export const SEED_INSURANCE = [
 
 export const SEED_TRANSACTIONS = [
   { id: 'txn-001', date: '2026-07-01', description: 'Monthly Salary', amount: 90000, type: 'income', category: 'Salary', account: acc1 },
-  { id: 'txn-002', date: '2026-07-05', description: 'Home Loan EMI', amount: 39165, type: 'expense', category: 'EMI', account: acc1, linkedLiability: 'lib-home-001' },
-  { id: 'txn-003', date: '2026-07-06', description: 'SIP - Axis Bluechip', amount: 10000, type: 'expense', category: 'Investment', account: acc1, linkedAsset: 'asset-mf-001' },
-  { id: 'txn-004', date: '2026-07-10', description: 'Grocery - DMart', amount: 4200, type: 'expense', category: 'Food', account: acc1 },
-  { id: 'txn-005', date: '2026-07-12', description: 'Electricity Bill', amount: 1800, type: 'expense', category: 'Utilities', account: acc1 },
-  { id: 'txn-006', date: '2026-07-14', description: 'Restaurant Dinner', amount: 2400, type: 'expense', category: 'Food', account: acc2 },
-  { id: 'txn-007', date: '2026-07-15', description: 'Gold Loan Interest', amount: 375, type: 'expense', category: 'Loan Interest', account: acc1, linkedLiability: 'lib-gold-001' },
+  { id: 'txn-002', date: '2026-07-05', description: 'Home Loan EMI', amount: 39165, type: 'expense', category: 'Loan & EMI Payments', account: acc1, linkedLiability: 'lib-home-001' },
+  { id: 'txn-003', date: '2026-07-06', description: 'SIP - Axis Bluechip', amount: 10000, type: 'expense', category: 'Investments', account: acc1, linkedAsset: 'asset-mf-001' },
+  { id: 'txn-004', date: '2026-07-10', description: 'Grocery - DMart', amount: 4200, type: 'expense', category: 'Groceries', account: acc1 },
+  { id: 'txn-005', date: '2026-07-12', description: 'Electricity Bill', amount: 1800, type: 'expense', category: 'Housing', account: acc1 },
+  { id: 'txn-006', date: '2026-07-14', description: 'Restaurant Dinner', amount: 2400, type: 'expense', category: 'Dining Out', account: acc2 },
+  { id: 'txn-007', date: '2026-07-15', description: 'Gold Loan Interest', amount: 375, type: 'expense', category: 'Loan & EMI Payments', account: acc1, linkedLiability: 'lib-gold-001' },
   { id: 'txn-008', date: '2026-07-16', description: 'Netflix & Spotify', amount: 1049, type: 'expense', category: 'Entertainment', account: acc2 },
 ];

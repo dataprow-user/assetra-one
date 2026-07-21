@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, Shield } from 'lucide-react';
+import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Insurance.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
@@ -9,18 +11,30 @@ const INS_TYPES = ['life','health','vehicle','term'];
 const INS_COLORS = { life: 'var(--blue)', health: 'var(--green)', vehicle: 'var(--yellow)', term: 'var(--accent-light)' };
 const emptyForm = () => ({ name: '', type: 'term', policyNo: '', premium: '', frequency: 'yearly', sumAssured: '', nextDue: '', maturityDate: '' });
 
+const NUMERIC_RULES = {
+  premium:    { label: 'Premium Amount', min: 1, max: MAX_AMOUNT },
+  sumAssured: { label: 'Sum Assured',    min: 0, max: MAX_AMOUNT, required: false },
+};
+
 export default function Insurance() {
   const { state, dispatch, uid } = useApp();
   const { insurance } = state;
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-  const openAdd = () => { setForm(emptyForm()); setModal({ mode: 'add' }); };
-  const openEdit = p => { setForm({ ...p }); setModal({ mode: 'edit', data: p }); };
+  const set = k => e => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, [k]: val }));
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
+  };
+  const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
+  const openEdit = p => { setForm({ ...p }); resetErrors(); setModal({ mode: 'edit', data: p }); };
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const payload = { ...form, premium: Number(form.premium), sumAssured: Number(form.sumAssured) };
     if (modal.mode === 'add') dispatch({ type: 'ADD_INSURANCE', payload: { ...payload, id: uid() } });
     else dispatch({ type: 'UPDATE_INSURANCE', payload: { ...payload, id: modal.data.id } });
@@ -87,16 +101,24 @@ export default function Insurance() {
         <Modal title={modal.mode === 'add' ? 'Add Insurance Policy' : 'Edit Policy'} onClose={() => setModal(null)} size="lg">
           <form onSubmit={handleSubmit}>
             <div className="form-row">
-              <div className="form-group"><label>Policy Name</label><input className="input" required placeholder="e.g. LIC Term Plan" value={form.name} onChange={set('name')} /></div>
+              <div className="form-group"><label>Policy Name</label><input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. LIC Term Plan" value={form.name} onChange={set('name')} /></div>
               <div className="form-group"><label>Type</label><select className="input" value={form.type} onChange={set('type')}>{INS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </div>
-            <div className="form-group"><label>Policy Number</label><input className="input" placeholder="LIC-XXXXX" value={form.policyNo} onChange={set('policyNo')} /></div>
+            <div className="form-group"><label>Policy Number</label><input className="input" maxLength={MAX_SHORT_LENGTH} placeholder="LIC-XXXXX" value={form.policyNo} onChange={set('policyNo')} /></div>
             <div className="form-row">
-              <div className="form-group"><label>Premium Amount (₹)</label><input className="input" type="number" required min="1" value={form.premium} onChange={set('premium')} /></div>
+              <div className="form-group">
+                <label>Premium Amount (₹)</label>
+                <input className={`input ${errors.premium ? 'input-invalid' : ''}`} type="number" required min="1" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} value={form.premium} onChange={set('premium')} />
+                {errors.premium && <span className="field-error">{errors.premium}</span>}
+              </div>
               <div className="form-group"><label>Frequency</label><select className="input" value={form.frequency} onChange={set('frequency')}><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label>Sum Assured (₹)</label><input className="input" type="number" min="0" value={form.sumAssured} onChange={set('sumAssured')} /></div>
+              <div className="form-group">
+                <label>Sum Assured (₹)</label>
+                <input className={`input ${errors.sumAssured ? 'input-invalid' : ''}`} type="number" min="0" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} value={form.sumAssured} onChange={set('sumAssured')} />
+                {errors.sumAssured && <span className="field-error">{errors.sumAssured}</span>}
+              </div>
               <div className="form-group"><label>Next Due Date</label><input className="input" type="date" value={form.nextDue} onChange={set('nextDue')} /></div>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>

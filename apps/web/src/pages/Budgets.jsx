@@ -3,6 +3,8 @@ import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, PieChart, ChevronLeft, ChevronRight, Table2, LayoutGrid } from 'lucide-react';
 import { DEFAULT_GROUPS } from '../data/categories';
+import { MAX_NOTES_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Budgets.css';
 
 const fmt = (n) => '₹' + Math.abs(Number(n || 0)).toLocaleString('en-IN');
@@ -12,6 +14,11 @@ const MONTHS = ['January','February','March','April','May','June',
 const emptyForm = (month, year) => ({
   month, year, group:'', category:'', subcategory:'', plannedAmount:'', notes:'',
 });
+
+const NUMERIC_RULES = {
+  year:          { label: 'Year', min: 2000, max: 2100, maxDecimals: 0 },
+  plannedAmount: { label: 'Planned Amount', min: 1, max: MAX_AMOUNT },
+};
 
 export default function Budgets() {
   const { state, dispatch, uid } = useApp();
@@ -31,6 +38,7 @@ export default function Budgets() {
   // Single-add modal
   const [modal, setModal] = useState(null);
   const [form,  setForm]  = useState(emptyForm(MONTHS[viewMonth], viewYear));
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
   const allCats     = expenseCategories;
   const filteredCats = form.group ? allCats.filter(c => c.group === form.group) : allCats;
@@ -49,13 +57,16 @@ export default function Budgets() {
       }
       return u;
     });
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
   };
 
-  const openAdd  = () => { setForm(emptyForm(MONTHS[viewMonth], viewYear)); setModal({mode:'add'}); };
-  const openEdit = b  => { setForm({...b}); setModal({mode:'edit', data:b}); };
+  const openAdd  = () => { setForm(emptyForm(MONTHS[viewMonth], viewYear)); resetErrors(); setModal({mode:'add'}); };
+  const openEdit = b  => { setForm({...b}); resetErrors(); setModal({mode:'edit', data:b}); };
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const payload = { ...form, plannedAmount: Number(form.plannedAmount) };
     if (modal.mode==='add') dispatch({ type:'ADD_BUDGET',    payload:{...payload, id:uid()} });
     else                    dispatch({ type:'UPDATE_BUDGET', payload:{...payload, id:modal.data.id} });
@@ -204,7 +215,8 @@ export default function Budgets() {
                 <div className="bulk-cat-header" style={{ gridColumn:'1 / -1' }}>
                   <span className="bulk-cat-label">{cat.name}</span>
                   <input
-                    type="number" min="0" step="any"
+                    type="number" min="0" max={MAX_AMOUNT} step="any"
+                    onKeyDown={blockInvalidNumberKeys}
                     className="bulk-amount-input"
                     placeholder="Overall ₹"
                     value={bulkAmounts[bulkKey(cat.name,'')] || ''}
@@ -216,7 +228,8 @@ export default function Budgets() {
                   <div key={sub} className="bulk-sub-cell">
                     <label className="bulk-sub-label">↳ {sub}</label>
                     <input
-                      type="number" min="0" step="any"
+                      type="number" min="0" max={MAX_AMOUNT} step="any"
+                      onKeyDown={blockInvalidNumberKeys}
                       className="bulk-amount-input"
                       placeholder="₹"
                       value={bulkAmounts[bulkKey(cat.name, sub)] || ''}
@@ -295,7 +308,8 @@ export default function Budgets() {
               </div>
               <div className="form-group">
                 <label>Year</label>
-                <input className="input" type="number" required min="2000" max="2100" value={form.year} onChange={set('year')} />
+                <input className={`input ${errors.year ? 'input-invalid' : ''}`} type="number" required min="2000" max="2100" onKeyDown={blockInvalidNumberKeys} value={form.year} onChange={set('year')} />
+                {errors.year && <span className="field-error">{errors.year}</span>}
               </div>
             </div>
             <div className="form-group">
@@ -315,11 +329,12 @@ export default function Budgets() {
             </div>
             <div className="form-group">
               <label>Planned Amount (₹)</label>
-              <input className="input" type="number" required min="1" placeholder="e.g. 5000" value={form.plannedAmount} onChange={set('plannedAmount')} />
+              <input className={`input ${errors.plannedAmount ? 'input-invalid' : ''}`} type="number" required min="1" max={MAX_AMOUNT} onKeyDown={blockInvalidNumberKeys} placeholder="e.g. 5000" value={form.plannedAmount} onChange={set('plannedAmount')} />
+              {errors.plannedAmount && <span className="field-error">{errors.plannedAmount}</span>}
             </div>
             <div className="form-group">
               <label>Notes <span style={{color:'var(--text-3)',fontSize:'0.8rem'}}>(optional)</span></label>
-              <input className="input" placeholder="Any detail..." value={form.notes} onChange={set('notes')} />
+              <input className="input" maxLength={MAX_NOTES_LENGTH} placeholder="Any detail..." value={form.notes} onChange={set('notes')} />
             </div>
             <div style={{ display:'flex', gap:12, justifyContent:'flex-end', marginTop:8 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>

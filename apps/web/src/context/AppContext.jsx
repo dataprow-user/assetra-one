@@ -7,10 +7,9 @@ import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_GROUPS }
 
 const AppContext = createContext(null);
 
-import { getDriveAuth, disconnectDrive } from '../utils/googleDriveSync';
+import { getIdentity, clearIdentity } from '../utils/googleAuth';
 
-const USERS_KEY = 'a1_users';
-const DATA_KEY  = 'a1_data';
+const DATA_KEY = 'a1_data';
 
 // ── Default Asset Types ──
 export const DEFAULT_ASSET_TYPES = [
@@ -81,24 +80,21 @@ function loadState() {
   } catch { return null; }
 }
 
-function loadUsers() {
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    if (raw) return JSON.parse(raw);
-    const defaultUsers = [
-      { id: 'user-ravi-001', name: 'Ravi Kumar', email: 'ravi@kumar.family', password: 'password123', role: 'admin', avatar: 'RK' },
-      { id: 'user-priya-002', name: 'Priya Kumar', email: 'priya@kumar.family', password: 'password123', role: 'member', avatar: 'PK' },
-    ];
-    localStorage.setItem(USERS_KEY, JSON.stringify(defaultUsers));
-    return defaultUsers;
-  } catch { return []; }
-}
+// One-time migration marker: names that only ever existed in the old,
+// overly-personal default category set. If any of these are still present
+// untouched, the user never customized away from the old defaults, so it's
+// safe to swap them for the new general set.
+const LEGACY_CATEGORY_NAMES = [
+  'Chennai Home', 'Vellore Home', 'Kallakurichi Home', 'TASC', 'DataProw', 'AbsoluteData', 'Seat'
+];
+const hasLegacyCategories = (categories) =>
+  Array.isArray(categories) && categories.some(c => LEGACY_CATEGORY_NAMES.includes(c.name));
 
 function initialState() {
   const saved = loadState();
   if (saved) {
-    if (!saved.expenseCategories) saved.expenseCategories = DEFAULT_EXPENSE_CATEGORIES;
-    if (!saved.incomeCategories)  saved.incomeCategories  = DEFAULT_INCOME_CATEGORIES;
+    if (!saved.expenseCategories || hasLegacyCategories(saved.expenseCategories)) saved.expenseCategories = DEFAULT_EXPENSE_CATEGORIES;
+    if (!saved.incomeCategories  || hasLegacyCategories(saved.incomeCategories))  saved.incomeCategories  = DEFAULT_INCOME_CATEGORIES;
     if (!saved.groups)            saved.groups            = DEFAULT_GROUPS;
     if (!saved.assetTypes)        saved.assetTypes        = DEFAULT_ASSET_TYPES;
     if (!saved.liabilityTypes)    saved.liabilityTypes    = DEFAULT_LIABILITY_TYPES;
@@ -208,47 +204,42 @@ function reducer(state, action) {
     // ── Settings ──
     case 'UPDATE_HOUSEHOLD': return { ...state, household: { ...state.household, ...action.payload } };
 
+    // ── Family Members (optional profile tags — not separate logins) ──
+    case 'ADD_MEMBER':
+      return { ...state, household: { ...state.household, members: [...(state.household.members || []), action.payload] } };
+    case 'UPDATE_MEMBER':
+      return { ...state, household: { ...state.household, members: (state.household.members || []).map(m => m.id === action.payload.id ? action.payload : m) } };
+    case 'DELETE_MEMBER':
+      return { ...state, household: { ...state.household, members: (state.household.members || []).filter(m => m.id !== action.payload) } };
+
     default: return state;
   }
 }
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, initialState);
-  const [currentUser, setCurrentUser] = React.useState(() => getDriveAuth());
+  const [currentUser, setCurrentUser] = React.useState(() => getIdentity());
 
   useEffect(() => {
     localStorage.setItem(DATA_KEY, JSON.stringify(state));
   }, [state]);
 
-  const loginWithGoogle = (authData) => {
-    setCurrentUser(authData);
+  const loginWithGoogle = (identity) => {
+    setCurrentUser(identity);
   };
 
   const logout = () => {
-    disconnectDrive();
+    // Signing out only ends the app session — Drive stays connected so the
+    // user isn't asked to reconnect it every time they sign back in.
+    clearIdentity();
     setCurrentUser(null);
-  };
-
-  const getUsers = () => loadUsers();
-
-  const updateUser = (id, data) => {
-    const users = loadUsers();
-    const updated = users.map(u => u.id === id ? { ...u, ...data } : u);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
-  };
-
-  const deleteUser = (id) => {
-    const users = loadUsers();
-    const updated = users.filter(u => u.id !== id);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
   };
 
   const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   return (
-    <AppContext.Provider value={{ 
-      state, dispatch, currentUser, loginWithGoogle, logout, 
-      getUsers, updateUser, deleteUser, uid 
+    <AppContext.Provider value={{
+      state, dispatch, currentUser, loginWithGoogle, logout, uid
     }}>
       {children}
     </AppContext.Provider>

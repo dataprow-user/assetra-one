@@ -1,0 +1,24 @@
+.fab-add-txn {
+  position: fixed; right: 28px; bottom: 28px; z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+  width: 60px; height: 60px; border: none; border-radius: 50%;
+  background: var(--accent-gradient); color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px var(--accent-glow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: fabGlow 2.8s ease-in-out infinite;
+}
+.fab-add-txn:hover {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 12px 32px var(--accent-glow);
+}
+.fab-add-txn:active { transform: translateY(0) scale(0.96); }
+
+@keyframes fabGlow {
+  0%, 100% { box-shadow: 0 8px 24px var(--accent-glow), 0 0 0 0 rgba(99,102,241,0.35); }
+  50%      { box-shadow: 0 8px 24px var(--accent-glow), 0 0 0 10px rgba(99,102,241,0); }
+}
+
+@media (max-width: 640px) {
+  .fab-add-txn { right: 18px; bottom: 18px; width: 54px; height: 54px; }
+}

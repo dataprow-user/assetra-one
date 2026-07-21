@@ -8,6 +8,29 @@
 .filter-tab:hover { color: var(--text-1); background: var(--panel-hover); }
 .filter-tab.active { color: var(--accent-light); background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); }
 
+/* ── Toast ─────────────────────────────────────────────────────────── */
+.txn-toast {
+  position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 20px; border-radius: 12px;
+  font-size: 0.9rem; font-weight: 500; max-width: 420px;
+  backdrop-filter: blur(16px); box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: slideUp 0.3s ease;
+}
+.txn-toast.success { background: rgba(16,185,129,0.18); border: 1px solid rgba(16,185,129,0.35); color: var(--green); }
+.txn-toast.error   { background: rgba(244,63,94,0.18);  border: 1px solid rgba(244,63,94,0.35);  color: var(--red); }
+@keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+
+/* ── No-account notice ─────────────────────────────────────────────── */
+.txn-account-notice {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; margin-bottom: 20px;
+  background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius-sm); color: var(--text-1); font-size: 0.88rem;
+}
+.txn-account-notice svg { color: var(--yellow); flex-shrink: 0; }
+.txn-account-notice span { flex: 1; }
+
 /* Live balance hint under account dropdown */
 .acc-balance-hint {
   display: flex; align-items: center; gap: 8px;

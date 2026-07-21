@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, List, Wallet, TrendingUp, CreditCard,
-  PieChart, CalendarDays, Shield, Settings, ChevronLeft, ChevronRight, Tags
+  PieChart, CalendarDays, Shield, Settings, Tags, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import BrandMark from './BrandMark';
 import './Sidebar.css';
 
 const navItems = [
@@ -23,10 +24,19 @@ export default function Sidebar({ activeTab, setActiveTab }) {
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-      <div className="sidebar-brand">
-        <div className="brand-logo">A1</div>
-        {!collapsed && <span className="brand-name">Assetra One</span>}
-      </div>
+      <button
+        className="sidebar-brand"
+        onClick={() => setCollapsed(c => !c)}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        <span className="sidebar-brand-main">
+          <span className="brand-logo"><BrandMark size={20} /></span>
+          {!collapsed && <span className="brand-name">Assetra One</span>}
+        </span>
+        <span className="sidebar-collapse-arrow">
+          {collapsed ? <ChevronRight size={16}/> : <ChevronLeft size={16}/>}
+        </span>
+      </button>
 
       <nav className="sidebar-nav">
         {navItems.map(({ id, label, icon: Icon }) => (
@@ -41,11 +51,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
           </button>
         ))}
       </nav>
-
-      <button className="collapse-btn" onClick={() => setCollapsed(c => !c)}>
-        {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        {!collapsed && <span>Collapse</span>}
-      </button>
     </aside>
   );
 }

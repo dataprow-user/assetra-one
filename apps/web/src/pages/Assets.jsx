@@ -3,6 +3,8 @@ import { useApp } from '../context/AppContext';
 import { DEFAULT_ASSET_TYPES } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, TrendingUp, Info, LayoutList, BarChart2, Settings2, X } from 'lucide-react';
+import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_NOTES_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Assets.css';
 
 const fmt  = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
@@ -19,6 +21,12 @@ const TYPE_UNIT = { gold:'grams', mutual_fund:'units', stock:'shares', fd:'month
 const emptyForm = () => ({ name:'', type:'gold', quantity:'', unit:'grams', purchasePrice:'', currentPrice:'', notes:'' });
 const emptyType = () => ({ label:'', color:'#6366f1' });
 
+const NUMERIC_RULES = {
+  quantity:       { label: 'Quantity',       min: 0 },
+  purchasePrice:  { label: 'Purchase Price', min: 0 },
+  currentPrice:   { label: 'Current Price',  min: 0 },
+};
+
 export default function Assets() {
   const { state, dispatch, uid } = useApp();
   const { assets } = state;
@@ -31,6 +39,7 @@ export default function Assets() {
   const [typeModal,   setTypeModal]   = useState(null);      // null | 'manage' | {mode:'add'|'edit', data?}
   const [form,        setForm]        = useState(emptyForm());
   const [typeForm,    setTypeForm]    = useState(emptyType());
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
   const set = k => e => {
     const val = e.target.value;
@@ -39,13 +48,16 @@ export default function Assets() {
       if (k === 'type') u.unit = TYPE_UNIT[val] || 'units';
       return u;
     });
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
   };
 
-  const openAdd  = () => { setForm(emptyForm()); setModal({ mode:'add' }); };
-  const openEdit = (a) => { setForm({ ...a, purchasePrice: a.purchasePrice ?? a.avgPrice ?? '' }); setModal({ mode:'edit', data:a }); };
+  const openAdd  = () => { setForm(emptyForm()); resetErrors(); setModal({ mode:'add' }); };
+  const openEdit = (a) => { setForm({ ...a, purchasePrice: a.purchasePrice ?? a.avgPrice ?? '' }); resetErrors(); setModal({ mode:'edit', data:a }); };
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const qty = Number(form.quantity), buy = Number(form.purchasePrice), curr = Number(form.currentPrice);
     const payload = { ...form, quantity:qty, purchasePrice:buy, currentPrice:curr, avgPrice:buy };
     if (modal.mode==='add') dispatch({ type:'ADD_ASSET',    payload:{ ...payload, id:uid() } });
@@ -217,7 +229,7 @@ export default function Assets() {
             <div className="form-row">
               <div className="form-group">
                 <label>Asset Name</label>
-                <input className="input" required placeholder="e.g. 22K Gold, Axis Bluechip" value={form.name} onChange={set('name')} />
+                <input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. 22K Gold, Axis Bluechip" value={form.name} onChange={set('name')} />
               </div>
               <div className="form-group">
                 <label>Asset Type</label>
@@ -229,21 +241,27 @@ export default function Assets() {
             <div className="form-row">
               <div className="form-group">
                 <label>Quantity <span className="field-hint">(how many you own)</span></label>
-                <input className="input" type="number" required min="0" step="any" placeholder="e.g. 10" value={form.quantity} onChange={set('quantity')} />
+                <input className={`input ${errors.quantity ? 'input-invalid' : ''}`} type="number" required min="0" max={MAX_AMOUNT} step="any"
+                  onKeyDown={blockInvalidNumberKeys} placeholder="e.g. 10" value={form.quantity} onChange={set('quantity')} />
+                {errors.quantity && <span className="field-error">{errors.quantity}</span>}
               </div>
               <div className="form-group">
                 <label>Unit <span className="field-hint">(grams / shares / units)</span></label>
-                <input className="input" placeholder="e.g. grams" value={form.unit} onChange={set('unit')} />
+                <input className="input" maxLength={MAX_SHORT_LENGTH} placeholder="e.g. grams" value={form.unit} onChange={set('unit')} />
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
                 <label>Purchase Price ₹ <span className="field-hint">(per unit, what you paid)</span></label>
-                <input className="input" type="number" required min="0" step="any" value={form.purchasePrice} onChange={set('purchasePrice')} />
+                <input className={`input ${errors.purchasePrice ? 'input-invalid' : ''}`} type="number" required min="0" max={MAX_AMOUNT} step="any"
+                  onKeyDown={blockInvalidNumberKeys} value={form.purchasePrice} onChange={set('purchasePrice')} />
+                {errors.purchasePrice && <span className="field-error">{errors.purchasePrice}</span>}
               </div>
               <div className="form-group">
                 <label>Current Price ₹ <span className="field-hint">(per unit, today)</span></label>
-                <input className="input" type="number" required min="0" step="any" value={form.currentPrice} onChange={set('currentPrice')} />
+                <input className={`input ${errors.currentPrice ? 'input-invalid' : ''}`} type="number" required min="0" max={MAX_AMOUNT} step="any"
+                  onKeyDown={blockInvalidNumberKeys} value={form.currentPrice} onChange={set('currentPrice')} />
+                {errors.currentPrice && <span className="field-error">{errors.currentPrice}</span>}
               </div>
             </div>
             {(liveBuy>0||liveCurr>0) && (
@@ -255,7 +273,7 @@ export default function Assets() {
             )}
             <div className="form-group">
               <label>Notes <span className="field-hint">(optional)</span></label>
-              <input className="input" placeholder="e.g. SBI FD maturing Dec 2025" value={form.notes} onChange={set('notes')} />
+              <input className="input" maxLength={MAX_NOTES_LENGTH} placeholder="e.g. SBI FD maturing Dec 2025" value={form.notes} onChange={set('notes')} />
             </div>
             <div style={{ display:'flex',gap:12,justifyContent:'flex-end',marginTop:8 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
@@ -291,7 +309,7 @@ export default function Assets() {
           <form onSubmit={handleTypeSubmit}>
             <div className="form-group">
               <label>Type Name</label>
-              <input className="input" required placeholder="e.g. Crypto, PPF" value={typeForm.label} onChange={e => setTypeForm(f => ({...f, label:e.target.value}))} />
+              <input className="input" required maxLength={MAX_SHORT_LENGTH} placeholder="e.g. Crypto, PPF" value={typeForm.label} onChange={e => setTypeForm(f => ({...f, label:e.target.value}))} />
             </div>
             <div className="form-group">
               <label>Color</label>

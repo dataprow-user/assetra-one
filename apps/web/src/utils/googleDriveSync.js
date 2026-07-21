@@ -6,6 +6,7 @@
  */
 
 import { trackUserEvent } from './userTracker';
+import { getIdentity } from './googleAuth';
 
 const STORAGE_KEY = 'a1_gdrive_auth';
 
@@ -24,50 +25,44 @@ export function disconnectDrive() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function connectGoogleDrive() {
+/**
+ * Requests Drive access as its own step, separate from signing in.
+ * No `prompt` is forced, so Google only shows the consent screen the first
+ * time (or after access is revoked) — reconnecting when already granted is silent.
+ */
+export function connectDriveOnly() {
   return new Promise((resolve, reject) => {
     if (!window.google) return reject(new Error('Google Identity Services not loaded.'));
-    
+
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (!clientId) return reject(new Error('Google Client ID is missing in configuration.'));
 
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
-      callback: async (tokenResponse) => {
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (tokenResponse) => {
         if (tokenResponse && tokenResponse.access_token) {
-          try {
-            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-            });
-            const userInfo = await res.json();
-            
-            const authData = {
-              accessToken: tokenResponse.access_token,
-              expiresAt: Date.now() + (tokenResponse.expires_in * 1000),
-              email: userInfo.email,
-              name: userInfo.name,
-              picture: userInfo.picture,
-            };
-            saveDriveAuth(authData);
-            
-            // Only log them once per browser session/device to avoid spamming the sheet
-            if (!localStorage.getItem('a1_gdrive_logged')) {
-              trackUserEvent(userInfo.name, userInfo.email, 'Connected Google Drive');
-              localStorage.setItem('a1_gdrive_logged', 'true');
-            }
-            
-            resolve(authData);
-          } catch (err) {
-            reject(new Error('Failed to fetch user profile: ' + err.message));
+          const authData = {
+            accessToken: tokenResponse.access_token,
+            expiresAt: Date.now() + (tokenResponse.expires_in * 1000),
+          };
+          saveDriveAuth(authData);
+
+          // Only log this once per browser/device to avoid spamming the sheet
+          if (!localStorage.getItem('a1_gdrive_logged')) {
+            const identity = getIdentity();
+            trackUserEvent(identity?.name, identity?.email, 'Connected Google Drive');
+            localStorage.setItem('a1_gdrive_logged', 'true');
           }
+
+          resolve(authData);
         } else {
-          reject(new Error('Authentication failed or was cancelled.'));
+          reject(new Error('Drive connection failed or was cancelled.'));
         }
       },
     });
 
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+    tokenClient.requestAccessToken();
   });
 }
 

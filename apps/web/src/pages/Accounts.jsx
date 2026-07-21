@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, Wallet, CreditCard, Banknote } from 'lucide-react';
+import { MAX_NAME_LENGTH, MAX_AMOUNT, blockInvalidSignedNumberKeys } from '../utils/validation';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 import './Accounts.css';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
@@ -11,19 +13,30 @@ const TYPE_COLORS = { bank: 'var(--green)', wallet: 'var(--blue)', credit_card: 
 
 const emptyForm = () => ({ name: '', type: 'bank', balance: '', currency: 'INR' });
 
+const NUMERIC_RULES = {
+  balance: { label: 'Balance', min: -MAX_AMOUNT, max: MAX_AMOUNT },
+};
+
 export default function Accounts() {
   const { state, dispatch, uid } = useApp();
   const { accounts, transactions } = state;
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const { errors, validate, reset: resetErrors, hasErrors } = useFieldErrors();
 
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const set = k => e => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, [k]: val }));
+    if (NUMERIC_RULES[k]) validate(k, val, NUMERIC_RULES[k]);
+  };
 
-  const openAdd = () => { setForm(emptyForm()); setModal({ mode: 'add' }); };
-  const openEdit = (a) => { setForm({ ...a }); setModal({ mode: 'edit', data: a }); };
+  const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
+  const openEdit = (a) => { setForm({ ...a }); resetErrors(); setModal({ mode: 'edit', data: a }); };
 
   const handleSubmit = e => {
     e.preventDefault();
+    const fieldErrors = Object.entries(NUMERIC_RULES).map(([k, rules]) => validate(k, form[k], rules));
+    if (hasErrors || fieldErrors.some(Boolean)) return;
     const payload = { ...form, balance: Number(form.balance) };
     if (modal.mode === 'add') {
       dispatch({ type: 'ADD_ACCOUNT', payload: { ...payload, id: uid() } });
@@ -78,7 +91,7 @@ export default function Accounts() {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Account Name</label>
-              <input className="input" required placeholder="e.g. HDFC Savings" value={form.name} onChange={set('name')} />
+              <input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. HDFC Savings" value={form.name} onChange={set('name')} />
             </div>
             <div className="form-group">
               <label>Type</label>
@@ -89,7 +102,9 @@ export default function Accounts() {
             <div className="form-row">
               <div className="form-group">
                 <label>Balance (₹)</label>
-                <input className="input" type="number" required value={form.balance} onChange={set('balance')} />
+                <input className={`input ${errors.balance ? 'input-invalid' : ''}`} type="number" required min={-MAX_AMOUNT} max={MAX_AMOUNT}
+                  onKeyDown={blockInvalidSignedNumberKeys} value={form.balance} onChange={set('balance')} />
+                {errors.balance && <span className="field-error">{errors.balance}</span>}
               </div>
               <div className="form-group">
                 <label>Currency</label>

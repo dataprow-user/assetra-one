@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
 import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { DEFAULT_GROUPS } from '../data/categories';
+import { MAX_NAME_LENGTH } from '../utils/validation';
 import './CategoryManager.css';
 
 export default function CategoryManager() {
@@ -75,7 +76,7 @@ export default function CategoryManager() {
 
   // ── Add Subcategory inline ──
   const handleAddSub = (cat) => {
-    const val = (newSubInput[cat.id] || '').trim();
+    const val = (newSubInput[cat.id] || '').trim().slice(0, MAX_NAME_LENGTH);
     if (!val) return;
     if (cat.subcategories.includes(val)) { alert('Subcategory already exists.'); return; }
     dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: [...cat.subcategories, val] } });
@@ -173,6 +174,7 @@ export default function CategoryManager() {
                     <div className="add-sub-row">
                       <input
                         className="input add-sub-input"
+                        maxLength={MAX_NAME_LENGTH}
                         placeholder="New sub-category name..."
                         value={newSubInput[cat.id] || ''}
                         onChange={e => setNewSubInput(s => ({ ...s, [cat.id]: e.target.value }))}
@@ -232,7 +234,7 @@ export default function CategoryManager() {
           <form onSubmit={handleCatSubmit}>
             <div className="form-group">
               <label>Category Name</label>
-              <input className="input" required placeholder="e.g. Outside Food"
+              <input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. Outside Food"
                 value={catForm.name}
                 onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} />
             </div>
@@ -260,7 +262,7 @@ export default function CategoryManager() {
           <form onSubmit={handleGroupSubmit}>
             <div className="form-group">
               <label>Group Name</label>
-              <input className="input" required placeholder="e.g. Discretionary"
+              <input className="input" required maxLength={MAX_NAME_LENGTH} placeholder="e.g. Discretionary"
                 value={groupForm.name}
                 onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} />
             </div>

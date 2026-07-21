@@ -1,0 +1,46 @@
+.tour-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; animation: fadeIn 0.15s ease;
+}
+
+.tour-box {
+  position: relative;
+  width: 100%; max-width: 420px;
+  background: #141824; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-xl);
+  padding: 36px 32px 28px;
+  text-align: center;
+  animation: fadeUp 0.2s ease;
+}
+
+.tour-skip {
+  position: absolute; top: 14px; right: 14px;
+  padding: 6px; border-radius: 8px; color: var(--text-2);
+  transition: all 0.2s; cursor: pointer;
+}
+.tour-skip:hover { background: var(--panel-hover); color: var(--text-1); }
+
+.tour-icon {
+  width: 64px; height: 64px; margin: 0 auto 18px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  box-shadow: 0 8px 24px var(--accent-glow);
+}
+
+.tour-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 10px; }
+.tour-desc  { color: var(--text-2); font-size: 0.92rem; line-height: 1.55; min-height: 66px; }
+
+.tour-dots { display: flex; justify-content: center; gap: 6px; margin: 22px 0 24px; }
+.tour-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--border-strong);
+  transition: all 0.2s;
+}
+.tour-dot.active { width: 20px; border-radius: 4px; background: var(--accent-light); }
+
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tour-actions .btn { flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 6px; }
