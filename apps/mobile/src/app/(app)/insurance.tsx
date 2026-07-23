@@ -6,7 +6,6 @@ import { useApp } from '../../context/AppContext';
 import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, DateField, ScreenHeader } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
-import { fmt } from '../../utils/format';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Insurance.jsx — same field set, same
@@ -26,7 +25,7 @@ const getDaysLeft = (dateStr: string) => {
 };
 
 export default function Insurance() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { insurance = [] } = state;
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState(emptyForm());
@@ -76,7 +75,7 @@ export default function Insurance() {
         />
       </View>
 
-      <FlatList
+      <FlatList extraData={fmt} 
         data={insurance}
         keyExtractor={(p: any) => p.id}
         contentContainerStyle={styles.listContent}
@@ -125,7 +124,17 @@ export default function Insurance() {
       />
 
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Insurance Policy' : 'Edit Policy'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Insurance Policy' : 'Edit Policy'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Policy' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Policy Name" value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} maxLength={MAX_NAME_LENGTH} placeholder="e.g. LIC Term Plan" />
           <SelectField label="Type" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))}
             options={INS_TYPES.map((t) => ({ label: t, value: t }))} />
@@ -134,10 +143,6 @@ export default function Insurance() {
           <SelectField label="Frequency" value={form.frequency} onChange={(v) => setForm((f) => ({ ...f, frequency: v }))} options={FREQUENCIES} />
           <FormField label="Sum Assured (₹)" keyboardType="numbers-and-punctuation" value={form.sumAssured} onChangeText={setSumAssured} error={errors.sumAssured} placeholder="0" />
           <DateField label="Next Due Date" value={form.nextDue} onChange={(v) => setForm((f) => ({ ...f, nextDue: v }))} />
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Policy' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
     </SafeAreaView>

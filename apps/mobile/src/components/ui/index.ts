@@ -14,3 +14,4 @@ export { default as Toast } from './Toast';
 export type { ToastType } from './Toast';
 export { default as IconBadge } from './IconBadge';
 export { default as DateField } from './DateField';
+export { default as DriveConnectBanner } from './DriveConnectBanner';

@@ -3,38 +3,41 @@ import { Modal, View, Text, Pressable, ScrollView, StyleSheet, KeyboardAvoidingV
 import { X } from 'lucide-react-native';
 import { Colors, Radius, FontSize, Spacing, Shadow } from '../../constants/theme';
 
-// Mirrors the web app's components/Modal.jsx — a titled panel with a close
-// button and a scrollable body, used for every Add/Edit form.
+// Bottom-sheet modal for every Add/Edit form: a scrollable body for the
+// fields plus a fixed footer (Save/Cancel) that stays above the keyboard.
 export default function AppModal({
-  visible, title, onClose, children,
-}: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+  visible, title, onClose, children, footer,
+}: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
-          <View style={styles.box}>
-            <View style={styles.header}>
-              <Text style={styles.title}>{title}</Text>
-              <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-                <X size={20} color={Colors.text2} />
-              </Pressable>
-            </View>
-            <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: Spacing.xl }} keyboardShouldPersistTaps="handled">
-              {children}
-            </ScrollView>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.box}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+              <X size={20} color={Colors.text2} />
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+          <ScrollView
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+          >
+            {children}
+          </ScrollView>
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: Spacing.lg },
-  kav: { maxHeight: '90%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   box: {
-    backgroundColor: '#141824', borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.borderStrong,
-    ...Shadow.xl, overflow: 'hidden',
+    maxHeight: '85%', backgroundColor: '#141824',
+    borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.borderStrong, ...Shadow.xl, overflow: 'hidden',
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -43,4 +46,5 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text1 },
   closeBtn: { padding: 6, borderRadius: Radius.sm },
   body: { padding: Spacing.lg },
+  footer: { padding: Spacing.lg, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: '#141824' },
 });

@@ -1,4 +1,12 @@
 .cat-tabs { display: flex; gap: 8px; align-items: center; }
+.cat-tabs .filter-tab { white-space: nowrap; }
+
+/* Tab labels ("Expense Categories" etc.) are long — on small screens let them
+   wrap onto their own full-width rows instead of overflowing the card. */
+@media (max-width: 640px) {
+  .cat-tabs { flex-wrap: wrap; }
+  .cat-tabs .filter-tab { flex: 1 1 auto; justify-content: center; text-align: center; }
+}
 .cat-count {
   display: inline-flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,0.1); border-radius: 99px;
@@ -25,7 +33,8 @@
 }
 .cat-row-header:hover { background: var(--panel-hover); }
 
-.cat-row-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.cat-row-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.cat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .expand-btn { color: var(--text-2); display: flex; align-items: center; cursor: pointer; }
 .cat-name { font-size: 0.92rem; font-weight: 500; }
 .sub-count-badge {
@@ -50,12 +59,22 @@
   color: var(--accent-light); border-radius: 99px;
   font-size: 0.8rem; font-weight: 500; padding: 4px 10px;
 }
-.sub-chip-del {
+.sub-chip-del, .sub-chip-edit, .sub-chip-save {
   display: flex; align-items: center; cursor: pointer;
   color: rgba(99,102,241,0.6); transition: color 0.15s;
   background: none; border: none; padding: 0;
 }
-.sub-chip-del:hover { color: var(--red); }
+.sub-chip-del:hover  { color: var(--red); }
+.sub-chip-edit:hover { color: var(--accent-light); }
+.sub-chip-save { color: var(--green); }
+.sub-chip-save:hover { color: var(--green); opacity: 0.8; }
+
+.sub-chip-editing { padding-right: 6px; }
+.sub-edit-input {
+  background: transparent; border: none; outline: none;
+  color: var(--accent-light); font-size: 0.8rem; font-weight: 500;
+  width: 100px; font-family: inherit;
+}
 
 .add-sub-row { display: flex; gap: 8px; align-items: center; }
 .add-sub-input { max-width: 280px; padding: 8px 12px; font-size: 0.85rem; }

@@ -2,17 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Home, User, Save, LogOut, Trash2, RefreshCcw, FlaskConical,
-  Download, Upload, Clock, CalendarDays, CheckCircle2, AlertTriangle,
+  Download, Upload, Clock, CheckCircle2, AlertTriangle,
   FileJson, FileSpreadsheet, FileText, Shield, CloudUpload, FolderOpen, Loader2
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
-import { exportJSON, exportExcel, exportCSV, buildPayload, getExportBlob } from '../utils/exportData';
+import { exportJSON, exportExcel, exportCSV, buildPayload, getExportBlob, exportReport } from '../utils/exportData';
 import { MAX_NAME_LENGTH } from '../utils/validation';
 import {
-  SCHEDULE_OPTIONS, getBackupSchedule, setBackupSchedule,
-  setLastBackupTime, lastBackupLabel,
-  getSyncFormat, setSyncFormat
+  setLastBackupTime, lastBackupLabel, getSyncFormat
 } from '../utils/backupSchedule';
 import {
   getDriveAuth, connectDriveOnly, disconnectDrive, uploadToDrive
@@ -33,11 +31,10 @@ export default function Settings() {
   const [toast,         setToast]         = useState(null);
   const [modal,         setModal]         = useState(null); // 'export'|'reset'|'sample'|'import-confirm'|'privacy-policy'|'member-form'
   const [importData,    setImportData]    = useState(null);
+  const [importResult,  setImportResult]  = useState(null); // { t, a, s } counts for the success modal
 
   const memberList = state.household?.members || [];
   const [editingMember, setEditingMember] = useState(null);
-
-  const [schedule,      setScheduleState] = useState(getBackupSchedule());
 
   const [lastBackup,    setLastBackup]    = useState(lastBackupLabel());
 
@@ -48,11 +45,22 @@ export default function Settings() {
 
   const fileRef = useRef();
 
+  // ── Reports (monthly / yearly download) ───────────────────────────────────
+  const now = new Date();
+  const [reportPeriod, setReportPeriod] = useState('monthly'); // 'monthly' | 'yearly'
+  const [reportYear,   setReportYear]   = useState(now.getFullYear());
+  const [reportMonth,  setReportMonth]  = useState(now.getMonth() + 1);
+
+  const REPORT_MONTHS = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  // A small window of selectable years around the current one.
+  const REPORT_YEARS = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+
+  const toastTimer = useRef(null);
   const showToast = (type, msg) => {
     setToast({ type, msg });
-    setTimeout(() => {
-      setToast(null);
-    }, 3000);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
   };
 
   const openMemberModal = (m) => {
@@ -90,17 +98,57 @@ export default function Settings() {
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
 
+  // ── Report download ───────────────────────────────────────────────────────
+  const handleDownloadReport = () => {
+    const res = exportReport(state, {
+      period: reportPeriod,
+      year:   reportYear,
+      month:  reportMonth,
+    });
+    if (res.count === 0) {
+      showToast('error', 'No transactions found for the selected period.');
+    } else {
+      const label = reportPeriod === 'yearly'
+        ? reportYear
+        : `${REPORT_MONTHS[reportMonth - 1]} ${reportYear}`;
+      showToast('success', `${label} report downloaded — ${res.count} transactions.`);
+    }
+  };
+
   // ── Reset / Sample ──────────────────────────────────────────────────────────
+  // Resetting is destructive, so we first download a safety JSON backup of the
+  // current data, then wipe local + cloud, then sign the user out.
   const handleReset = async () => {
-    dispatch({ type: 'RESET_ALL' });
     setModal(null);
-    showToast('success', 'All data cleared. Wiping cloud backup...');
+
+    // Timestamped snapshot name, e.g. Assetra-Backup-2026-07-22_15-30-45.json
+    const now  = new Date();
+    const pad  = n => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+                  `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+
+    // 1. Safety backup of the CURRENT data (state is still populated here).
+    if (driveConnected) {
+      // Keep a timestamped snapshot in Drive so this reset is recoverable later.
+      try {
+        showToast('success', 'Saving a timestamped backup to Google Drive…');
+        await uploadToDrive(getExportBlob(state, 'json'), `Assetra-Backup-${stamp}.json`);
+      } catch (e) {
+        // Drive snapshot failed — fall back to a local download so nothing is lost.
+        console.error('Drive snapshot failed, downloading a local copy instead:', e);
+        try { exportJSON(state); } catch { /* ignore */ }
+      }
+    } else {
+      // Not connected to Drive — download a local copy so nothing is lost.
+      try { exportJSON(state); } catch { /* ignore */ }
+    }
+
+    // 2. Wipe the main cloud backup so the empty state syncs across devices.
     if (driveConnected) {
       try {
         const format = getSyncFormat();
         const ext = format === 'excel' ? 'xlsx' : format;
         const filename = `Assetra-Backup.${ext}`;
-        // Import emptyState from AppContext to generate empty payload
         const emptyStateBlob = getExportBlob({
           household: { name: 'My Household', currency: 'INR' },
           accounts: [], transactions: [], assets: [], liabilities: [],
@@ -110,11 +158,17 @@ export default function Settings() {
         await uploadToDrive(emptyStateBlob, filename);
         setLastBackupTime();
         setLastBackup(lastBackupLabel());
-        showToast('success', 'Cloud backup wiped successfully!');
       } catch (e) {
-        showToast('error', 'Failed to wipe cloud backup: ' + e.message);
+        console.error('Failed to wipe cloud backup:', e);
       }
     }
+
+    // 3. Clear all local data, then auto sign-out.
+    showToast('success', driveConnected
+      ? `Backup saved to Drive (Assetra-Backup-${stamp}.json). Data cleared — signing out…`
+      : 'Backup downloaded. Data cleared — signing out…');
+    dispatch({ type: 'RESET_ALL' });
+    setTimeout(() => logout(), 1800);
   };
   const handleLoadSample = () => {
     dispatch({ type: 'LOAD_SAMPLE_DATA' });
@@ -155,9 +209,14 @@ export default function Settings() {
     e.target.value = '';
   };
   const handleImport = () => {
+    if (!importData) { showToast('error', 'No file selected to import.'); return; }
+    const t = importData.transactions?.length || 0;
+    const a = importData.accounts?.length || 0;
+    const s = importData.assets?.length || 0;
     dispatch({ type: 'IMPORT_DATA', payload: importData });
-    setModal(null); setImportData(null);
-    showToast('success', 'Data imported successfully!');
+    setImportData(null);
+    setImportResult({ t, a, s });
+    setModal('import-success'); // show a clear confirmation the user must acknowledge
   };
 
   // ── Google Drive Sync ───────────────────────────────────────────────────────
@@ -211,11 +270,6 @@ export default function Settings() {
       setSyncStatus('error');
       setTimeout(() => setSyncStatus(null), 3000);
     }
-  };
-
-  const handleScheduleChange = (val) => {
-    setScheduleState(val);
-    setBackupSchedule(val);
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -313,6 +367,45 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* ── Reports ───────────────────────────────────────────────────── full */}
+        <div className="section-box settings-full-width">
+          <div className="section-title"><FileSpreadsheet size={18} className="s-icon"/> Download Report</div>
+          <p className="section-desc">
+            Export a spreadsheet report of your transactions for a specific month or year —
+            includes an income / expense summary and a per-category breakdown.
+          </p>
+
+          <div className="report-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Period</label>
+              <select className="input" value={reportPeriod} onChange={e => setReportPeriod(e.target.value)}>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+
+            {reportPeriod === 'monthly' && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Month</label>
+                <select className="input" value={reportMonth} onChange={e => setReportMonth(Number(e.target.value))}>
+                  {REPORT_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Year</label>
+              <select className="input" value={reportYear} onChange={e => setReportYear(Number(e.target.value))}>
+                {REPORT_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+
+            <button className="btn btn-primary" onClick={handleDownloadReport}>
+              <Download size={15}/> Download Report
+            </button>
+          </div>
+        </div>
+
         {/* ── Cloud Sync ────────────────────────────────────────────────── full */}
         <div className="section-box settings-full-width">
           <div className="section-title"><CloudUpload size={18} className="s-icon"/> Google Drive Backup</div>
@@ -370,33 +463,18 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Schedule */}
+          {/* Backup status — automatic, real-time (no schedule needed) */}
           <div className="schedule-section">
             <div className="schedule-label">
-              <Clock size={15}/> Backup Schedule
+              <Clock size={15}/> Automatic Backup
               <span className="last-backup-chip">Last backup: {lastBackup}</span>
             </div>
-            <div className="schedule-grid">
-              {SCHEDULE_OPTIONS.map(opt => (
-                <button key={opt.value}
-                  className={`schedule-btn ${schedule === opt.value ? 'active' : ''}`}
-                  onClick={() => handleScheduleChange(opt.value)}>
-                  <CalendarDays size={16}/>
-                  <div>
-                    <div className="sb-label">{opt.label}</div>
-                    <div className="sb-desc">{opt.desc}</div>
-                  </div>
-                </button>
-              ))}
+            <div className="schedule-note">
+              <CheckCircle2 size={13} style={{ color:'var(--green)', flexShrink:0 }}/>
+              {driveConnected
+                ? 'Always on — your data is backed up to "AssetraBackups" in Google Drive automatically after every change.'
+                : 'Connect Google Drive above to turn on automatic backup. Until then, use Export to save a manual backup anytime.'}
             </div>
-            {schedule !== 'off' && (
-              <div className="schedule-note">
-                <CheckCircle2 size={13} style={{ color:'var(--green)', flexShrink:0 }}/>
-                {driveConnected
-                  ? `Auto backup active (${schedule}) — files will be silently uploaded to "AssetraBackups" in Google Drive when due.`
-                  : `Schedule set to ${schedule}, but Google Drive is not connected. A manual download prompt will appear when backup is due.`}
-              </div>
-            )}
           </div>
         </div>
 
@@ -445,7 +523,7 @@ export default function Settings() {
             <div className="danger-row">
               <div>
                 <div className="danger-row-title"><RefreshCcw size={14}/> Reset All Data</div>
-                <div className="danger-row-desc">Wipes everything and starts fresh with empty data. Cannot be undone.</div>
+                <div className="danger-row-desc">Saves a safety backup (a timestamped copy to Google Drive, or a local download if Drive isn't connected), wipes everything, and signs you out. Cannot be undone.</div>
               </div>
               <button className="btn btn-danger" onClick={() => setModal('reset')}>Reset to Empty</button>
             </div>
@@ -495,7 +573,11 @@ export default function Settings() {
           <div className="confirm-modal">
             <div className="confirm-icon warn"><Trash2 size={28}/></div>
             <p>This will <strong>permanently delete all your data</strong> — transactions, assets, accounts, budgets, events, insurance — and start completely fresh.</p>
-            <p style={{ marginTop:8, color:'var(--text-2)', fontSize:'0.85rem' }}>Tip: Export a JSON backup first.</p>
+            <p style={{ marginTop:8, color:'var(--text-2)', fontSize:'0.85rem' }}>
+              {driveConnected
+                ? 'A timestamped backup will be saved to your Google Drive (AssetraBackups) first, then you\'ll be signed out.'
+                : 'A JSON backup will be downloaded to this device first, then you\'ll be signed out.'}
+            </p>
             <div className="confirm-actions">
               <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
               <button className="btn btn-danger" onClick={handleReset}>Yes, Reset Everything</button>
@@ -533,6 +615,26 @@ export default function Settings() {
             <div className="confirm-actions">
               <button className="btn btn-ghost" onClick={() => { setModal(null); setImportData(null); }}>Cancel</button>
               <button className="btn btn-primary" onClick={handleImport}>Yes, Import</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Import success */}
+      {modal === 'import-success' && (
+        <Modal title="Import Complete" onClose={() => { setModal(null); setImportResult(null); }} size="sm">
+          <div className="confirm-modal">
+            <div className="confirm-icon" style={{ background:'rgba(16,185,129,0.15)', color:'var(--green)' }}>
+              <CheckCircle2 size={28}/>
+            </div>
+            <p><strong>Data imported successfully!</strong></p>
+            <p style={{ color:'var(--text-2)', fontSize:'0.85rem' }}>
+              Restored <strong>{importResult?.t || 0}</strong> transactions ·{' '}
+              <strong>{importResult?.a || 0}</strong> accounts ·{' '}
+              <strong>{importResult?.s || 0}</strong> assets.
+            </p>
+            <div className="confirm-actions" style={{ justifyContent:'center' }}>
+              <button className="btn btn-primary" onClick={() => { setModal(null); setImportResult(null); }}>Done</button>
             </div>
           </div>
         </Modal>

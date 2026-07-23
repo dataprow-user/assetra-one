@@ -1,4 +1,4 @@
-import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Uses the native Google Sign-In SDK (not a browser redirect) — the
@@ -56,17 +56,42 @@ export function useGoogleSignIn() {
   const clientId = getGoogleClientId();
 
   const signIn = async () => {
-    if (!clientId) throw new Error('Google Client ID is missing — set EXPO_PUBLIC_GOOGLE_CLIENT_ID in .env.');
+    if (!clientId) throw new Error("Google Sign-In isn't set up yet (missing client ID). Please contact support.");
     ensureConfigured();
 
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const response = await GoogleSignin.signIn();
-    if (!isSuccessResponse(response)) throw new Error('Sign-in was cancelled or failed.');
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response)) throw new Error('Sign-in was cancelled.');
 
-    const { user } = response.data;
-    const identity = { email: user.email, name: user.name || '', picture: user.photo || '' };
-    await saveIdentity(identity);
-    return identity;
+      const { user } = response.data;
+      const identity = { email: user.email, name: user.name || '', picture: user.photo || '' };
+      await saveIdentity(identity);
+      return identity;
+    } catch (err: any) {
+      // Turn the SDK's coded errors into clear, actionable messages.
+      if (isErrorWithCode(err)) {
+        switch (err.code) {
+          case statusCodes.SIGN_IN_CANCELLED:
+            throw new Error('Sign-in was cancelled.');
+          case statusCodes.IN_PROGRESS:
+            throw new Error('A sign-in is already in progress — please wait a moment.');
+          case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+            throw new Error('Google Play Services is missing or out of date. Update it from the Play Store and try again.');
+        }
+      }
+      const msg = String(err?.message || '');
+      // DEVELOPER_ERROR (native code 10) = this build's SHA-1/OAuth client isn't registered.
+      if (String(err?.code) === '10' || /DEVELOPER_ERROR/i.test(msg)) {
+        throw new Error("This app build isn't registered for Google Sign-In yet (configuration error). Please contact support.");
+      }
+      if (/network|timeout|unable to resolve host|failed to connect|ECONN/i.test(msg)) {
+        throw new Error("Couldn't reach Google. Check your internet connection and try again.");
+      }
+      // Already-clear message we threw above, or a reasonable fallback.
+      if (err instanceof Error && msg && !/statusCode|getTokens|\bnull\b/i.test(msg)) throw err;
+      throw new Error('Google sign-in failed. Please try again.');
+    }
   };
 
   return { ready: !!clientId, signIn };

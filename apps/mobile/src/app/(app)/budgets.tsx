@@ -1,20 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PieChart, ChevronLeft, ChevronRight, Plus, Edit2, Trash2 } from 'lucide-react-native';
+import { PieChart, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, LayoutGrid, Table2 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius, GroupColors } from '../../constants/theme';
-import { fmt } from '../../utils/format';
 import { MAX_NOTES_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
 
-// Ported from apps/web/src/pages/Budgets.jsx — the card view + single
-// Add/Edit modal. The web version also has a "Bulk Entry" mode: a 2-column
-// desktop grid for filling in a whole month of category budgets at once.
-// That layout doesn't translate to a phone screen, so it's intentionally
-// skipped here — the single Add/Edit modal covers the same underlying data,
-// just one budget at a time, which is the frequently-used path anyway.
+// Ported from apps/web/src/pages/Budgets.jsx — card view + single Add/Edit
+// modal, PLUS the "Bulk Entry" mode: pick a group, fill in every category's
+// (and sub-category's) planned amount for the period at once, Save All.
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -31,7 +27,7 @@ const NUMERIC_RULES: Record<string, any> = {
 };
 
 export default function Budgets() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { budgets = [], expenseCategories = [] } = state;
 
   // Month / Year navigation
@@ -111,6 +107,50 @@ export default function Budgets() {
 
   const totalPlanned = viewBudgets.reduce((s: number, b: any) => s + Number(b.plannedAmount || 0), 0);
 
+  // ── Bulk Entry mode ──
+  const [entryMode, setEntryMode] = useState<'cards' | 'bulk'>('cards');
+  const groupList = useMemo(() => [...new Set(expenseCategories.map((c: any) => c.group).filter(Boolean))] as string[], [expenseCategories]);
+  const [bulkGroup, setBulkGroup] = useState<string>(groupList[0] || '');
+  const [bulkAmounts, setBulkAmounts] = useState<Record<string, string>>({});
+
+  const bulkKey = (cat: string, sub?: string) => `${cat}||${sub || '__cat__'}`;
+
+  const loadExisting = () => {
+    const init: Record<string, string> = {};
+    budgets
+      .filter((b: any) => b.month === MONTHS[viewMonth] && String(b.year) === String(viewYear))
+      .forEach((b: any) => { init[bulkKey(b.category, b.subcategory)] = String(b.plannedAmount || ''); });
+    setBulkAmounts(init);
+  };
+
+  const openBulk = () => { setEntryMode('bulk'); if (!bulkGroup) setBulkGroup(groupList[0] || ''); loadExisting(); };
+
+  const saveBulk = () => {
+    let count = 0;
+    Object.entries(bulkAmounts).forEach(([key, amount]) => {
+      if (!amount || Number(amount) <= 0) return;
+      const [cat, sub] = key.split('||');
+      const subVal = sub === '__cat__' ? '' : sub;
+      const catObj = expenseCategories.find((c: any) => c.name === cat);
+      const existing = budgets.find((b: any) =>
+        b.category === cat && b.subcategory === subVal &&
+        b.month === MONTHS[viewMonth] && String(b.year) === String(viewYear)
+      );
+      const payload = {
+        month: MONTHS[viewMonth], year: viewYear,
+        group: catObj?.group || '', category: cat, subcategory: subVal,
+        plannedAmount: Number(amount), notes: '',
+      };
+      if (existing) dispatch({ type: 'UPDATE_BUDGET', payload: { ...payload, id: existing.id } });
+      else dispatch({ type: 'ADD_BUDGET', payload: { ...payload, id: uid() } });
+      count++;
+    });
+    Alert.alert('Saved', `${count} budget entries saved for ${MONTHS[viewMonth]} ${viewYear}.`);
+  };
+
+  const bulkCats = useMemo(() => expenseCategories.filter((c: any) => c.group === bulkGroup), [expenseCategories, bulkGroup]);
+  const savedCountFor = (g: string) => budgets.filter((b: any) => b.group === g && b.month === MONTHS[viewMonth] && String(b.year) === String(viewYear)).length;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.headerWrap}>
@@ -123,9 +163,17 @@ export default function Budgets() {
             </>
           }
           right={
-            <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={8}>
-              <Plus size={20} color="#fff" />
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              <Pressable onPress={() => setEntryMode('cards')} style={[styles.iconBtn, entryMode === 'cards' && styles.iconBtnActive]} hitSlop={8}>
+                <LayoutGrid size={18} color={entryMode === 'cards' ? Colors.accentLight : Colors.text2} />
+              </Pressable>
+              <Pressable onPress={openBulk} style={[styles.iconBtn, entryMode === 'bulk' && styles.iconBtnActive]} hitSlop={8}>
+                <Table2 size={18} color={entryMode === 'bulk' ? Colors.accentLight : Colors.text2} />
+              </Pressable>
+              <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={8}>
+                <Plus size={20} color="#fff" />
+              </Pressable>
+            </View>
           }
         />
       </View>
@@ -156,7 +204,67 @@ export default function Budgets() {
           </View>
         </Card>
 
-        {viewBudgets.length === 0 ? (
+        {entryMode === 'bulk' ? (
+          <Card style={{ gap: Spacing.md }}>
+            <View style={styles.bulkHeaderRow}>
+              <Text style={styles.bulkHeaderText}>📋 {MONTHS[viewMonth]} {viewYear} — pick a group, fill amounts, Save All</Text>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                <Button title="↺ Load Saved" variant="ghost" size="sm" onPress={loadExisting} />
+                <Button title="💾 Save All" size="sm" onPress={saveBulk} />
+              </View>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkTabsRow}>
+              {groupList.map((g) => {
+                const saved = savedCountFor(g);
+                const active = bulkGroup === g;
+                return (
+                  <Pressable key={g} onPress={() => setBulkGroup(g)} style={[styles.bulkTab, active && styles.bulkTabActive]}>
+                    <Text style={[styles.bulkTabText, active && styles.bulkTabTextActive]}>{g}</Text>
+                    {saved > 0 ? (
+                      <View style={styles.bulkSavedDot}><Text style={styles.bulkSavedDotText}>{saved}</Text></View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {bulkCats.length === 0 ? (
+              <Text style={styles.bulkEmptyText}>No categories in this group. Add them via the Categories screen.</Text>
+            ) : (
+              <View style={{ gap: Spacing.md }}>
+                {bulkCats.map((cat: any) => (
+                  <View key={cat.id} style={styles.bulkCatBlock}>
+                    <View style={styles.bulkCatHeader}>
+                      <Text style={styles.bulkCatLabel}>{cat.name}</Text>
+                      <TextInput
+                        style={styles.bulkInput}
+                        keyboardType="decimal-pad"
+                        placeholder="Overall ₹"
+                        placeholderTextColor={Colors.text3}
+                        value={bulkAmounts[bulkKey(cat.name)] || ''}
+                        onChangeText={(v) => setBulkAmounts((a) => ({ ...a, [bulkKey(cat.name)]: sanitizeNumericInput(v) }))}
+                      />
+                    </View>
+                    {(cat.subcategories || []).map((sub: string) => (
+                      <View key={sub} style={styles.bulkSubRow}>
+                        <Text style={styles.bulkSubLabel}>↳ {sub}</Text>
+                        <TextInput
+                          style={styles.bulkInput}
+                          keyboardType="decimal-pad"
+                          placeholder="₹"
+                          placeholderTextColor={Colors.text3}
+                          value={bulkAmounts[bulkKey(cat.name, sub)] || ''}
+                          onChangeText={(v) => setBulkAmounts((a) => ({ ...a, [bulkKey(cat.name, sub)]: sanitizeNumericInput(v) }))}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+          </Card>
+        ) : viewBudgets.length === 0 ? (
           <EmptyState
             icon={PieChart}
             title={`No Budgets for ${viewMode === 'month' ? `${MONTHS[viewMonth]} ${viewYear}` : viewYear}`}
@@ -197,7 +305,17 @@ export default function Budgets() {
 
       {/* Add/Edit Modal */}
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Budget' : 'Edit Budget'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Budget' : 'Edit Budget'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Budget' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <SelectField label="Month" value={form.month} onChange={(v) => updateField('month', v)}
             options={MONTHS.map((m) => ({ label: m, value: m }))} />
           <FormField label="Year" keyboardType="number-pad" value={form.year} onChangeText={setYear} error={errors.year} placeholder="2026" />
@@ -210,10 +328,6 @@ export default function Budgets() {
             error={errors.plannedAmount} placeholder="e.g. 5000" />
           <FormField label="Notes" hint="(optional)" value={form.notes} onChangeText={(v) => setForm((f: any) => ({ ...f, notes: v }))}
             maxLength={MAX_NOTES_LENGTH} placeholder="Any detail..." />
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Budget' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
     </SafeAreaView>
@@ -252,4 +366,34 @@ const styles = StyleSheet.create({
   bcNotes: { color: Colors.text2, fontSize: FontSize.sm, fontStyle: 'italic', marginTop: 2 },
   bcPeriod: { color: Colors.text3, fontSize: FontSize.xs, marginTop: 4 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
+  },
+  iconBtnActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  bulkHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.sm },
+  bulkHeaderText: { color: Colors.text1, fontSize: FontSize.sm, flex: 1, minWidth: 160 },
+  bulkTabsRow: { gap: Spacing.sm, paddingVertical: 2 },
+  bulkTab: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill, backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
+  },
+  bulkTabActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  bulkTabText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
+  bulkTabTextActive: { color: Colors.accentLight },
+  bulkSavedDot: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.green, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  bulkSavedDotText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  bulkEmptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center', paddingVertical: Spacing.xl },
+  bulkCatBlock: { gap: Spacing.sm },
+  bulkCatHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm,
+    backgroundColor: 'rgba(99,102,241,0.1)', borderRadius: Radius.sm, padding: Spacing.sm,
+  },
+  bulkCatLabel: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base, flex: 1 },
+  bulkSubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, paddingLeft: Spacing.lg },
+  bulkSubLabel: { color: Colors.text2, fontSize: FontSize.sm, flex: 1 },
+  bulkInput: {
+    width: 110, paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.sm, textAlign: 'right',
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1, fontSize: FontSize.base,
+  },
 });

@@ -1,6 +1,10 @@
-# Welcome to your Expo app 👋
+# Assetra One — Mobile
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+
+📖 **Full documentation:**
+- [Developer Guide](./docs/DEVELOPER_GUIDE.md) — environment setup, building, and a troubleshooting runbook
+- [User Guide](./docs/USER_GUIDE.md) — how to use the app
 
 ## Get started
 

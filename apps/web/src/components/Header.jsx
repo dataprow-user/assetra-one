@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Bell, Search, LogOut, List, Wallet, TrendingUp, CreditCard, PieChart, CalendarDays, Shield, Tags
+  Bell, Search, LogOut, List, Wallet, TrendingUp, CreditCard, PieChart, CalendarDays, Shield, Tags, Eye, EyeOff, Menu
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -64,11 +64,20 @@ function searchAppData(state, rawQuery) {
   return results.slice(0, MAX_RESULTS);
 }
 
-export default function Header({ activeTab }) {
-  const { currentUser, logout, state } = useApp();
+export default function Header({ activeTab, onMenuClick }) {
+  const { currentUser, logout, state, amountsHidden, toggleAmounts } = useApp();
   const [showProfile, setShowProfile] = useState(false);
   const [query, setQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
+
+  // One-time hint pointing at the eye icon while amounts are masked. It clears
+  // as soon as the user reveals amounts, or auto-dismisses after a few seconds.
+  const [showEyeHint, setShowEyeHint] = useState(amountsHidden);
+  useEffect(() => {
+    if (!amountsHidden) { setShowEyeHint(false); return; }
+    const t = setTimeout(() => setShowEyeHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [amountsHidden]);
 
   const profileRef = useRef(null);
   const searchRef = useRef(null);
@@ -101,6 +110,14 @@ export default function Header({ activeTab }) {
 
   return (
     <header className="app-header">
+      <button
+        className="header-menu-btn btn btn-icon btn-ghost"
+        onClick={onMenuClick}
+        aria-label="Open menu"
+      >
+        <Menu size={22} />
+      </button>
+
       <div className="header-left">
         <h2 className="header-title">{pageTitles[activeTab] || 'Assetra One'}</h2>
       </div>
@@ -137,6 +154,23 @@ export default function Header({ activeTab }) {
       </div>
 
       <div className="header-right">
+        <div className="eye-toggle-wrap">
+          <button
+            className="btn btn-icon btn-ghost eye-toggle-btn"
+            onClick={toggleAmounts}
+            title={amountsHidden ? 'Show amounts' : 'Hide amounts'}
+            aria-label={amountsHidden ? 'Show amounts' : 'Hide amounts'}
+          >
+            {amountsHidden ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+          {showEyeHint && (
+            <div className="eye-hint" role="status" onClick={() => setShowEyeHint(false)}>
+              <EyeOff size={13} />
+              <span>Amounts are hidden — tap the eye to show them.</span>
+            </div>
+          )}
+        </div>
+
         <div className="notif-btn-wrap">
           <button className="btn btn-icon btn-ghost">
             <Bell size={20} />

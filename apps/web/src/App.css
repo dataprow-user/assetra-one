@@ -66,3 +66,17 @@
 .backup-banner-actions { display: flex; gap: 8px; }
 .btn-sm { padding: 6px 14px !important; font-size: 0.82rem !important; }
 
+/* ── Mobile layout ── */
+@media (max-width: 900px) {
+  /* Guard against stray horizontal scroll — wide tables have their own
+     .table-wrap scroll container, so clipping the page itself is safe. */
+  .app-content { padding: 20px 16px; overflow-x: hidden; }
+  .backup-banner { padding: 10px 16px; font-size: 0.82rem; }
+}
+@media (max-width: 640px) {
+  .app-content { padding: 16px 12px; }
+  .backup-banner { flex-direction: column; align-items: flex-start; }
+  .backup-banner-actions { width: 100%; }
+  .backup-banner-actions .btn { flex: 1; }
+}
+

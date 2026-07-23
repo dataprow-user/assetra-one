@@ -4,9 +4,9 @@ import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, Shield } from 'lucide-react';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmt } from '../utils/format';
 import './Insurance.css';
 
-const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
 const INS_TYPES = ['life','health','vehicle','term'];
 const INS_COLORS = { life: 'var(--blue)', health: 'var(--green)', vehicle: 'var(--yellow)', term: 'var(--accent-light)' };
 const emptyForm = () => ({ name: '', type: 'term', policyNo: '', premium: '', frequency: 'yearly', sumAssured: '', nextDue: '', maturityDate: '' });

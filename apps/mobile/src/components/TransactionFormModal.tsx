@@ -4,7 +4,6 @@ import { Wallet } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { AppModal, FormField, SelectField, DateField, Button } from './ui';
 import { Colors, FontSize, Spacing, Radius } from '../constants/theme';
-import { fmtSigned } from '../utils/format';
 import { getNumberError, sanitizeNumericInput, MAX_NOTES_LENGTH, MAX_AMOUNT } from '../utils/validation';
 
 const emptyForm = () => ({
@@ -28,7 +27,7 @@ export default function TransactionFormModal({
   onClose: () => void;
   onError?: (msg: string) => void;
 }) {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { accounts = [], expenseCategories = [], incomeCategories = [], events = [] } = state;
 
   const [form, setForm] = useState(() =>
@@ -78,7 +77,17 @@ export default function TransactionFormModal({
   const afterBal = form.type === 'income' ? accBal + liveAmt : accBal - liveAmt;
 
   return (
-    <AppModal visible={visible} title={mode === 'add' ? 'Add Transaction' : 'Edit Transaction'} onClose={onClose}>
+    <AppModal
+      visible={visible}
+      title={mode === 'add' ? 'Add Transaction' : 'Edit Transaction'}
+      onClose={onClose}
+      footer={
+        <View style={styles.actions}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
+          <Button title={mode === 'add' ? 'Add Transaction' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+        </View>
+      }
+    >
       <SelectField
         label="Type"
         value={form.type}
@@ -153,10 +162,6 @@ export default function TransactionFormModal({
         placeholder="Any extra detail…"
       />
 
-      <View style={styles.actions}>
-        <Button title="Cancel" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
-        <Button title={mode === 'add' ? 'Add Transaction' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-      </View>
     </AppModal>
   );
 }

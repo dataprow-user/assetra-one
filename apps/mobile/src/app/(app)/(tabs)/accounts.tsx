@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2 } from 'lucide-react-native';
+import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, IconBadge } from '../../../components/ui';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../../constants/theme';
-import { fmtSigned } from '../../../utils/format';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../../utils/validation';
 
 const ACCOUNT_TYPES = ['bank', 'wallet', 'credit_card', 'demat', 'cash'];
@@ -17,7 +16,7 @@ const CURRENCIES = ['INR', 'USD', 'EUR'];
 const emptyForm = () => ({ name: '', type: 'bank', balance: '', currency: 'INR' });
 
 export default function Accounts() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN, amountsHidden, toggleAmounts } = useApp();
   const { accounts = [], transactions = [] } = state;
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState(emptyForm());
@@ -61,10 +60,13 @@ export default function Accounts() {
             {accounts.length} accounts • Total: <Text style={{ color: totalBalance >= 0 ? Colors.green : Colors.red }}>{fmtSigned(totalBalance)}</Text>
           </Text>
         </View>
+        <Pressable onPress={toggleAmounts} hitSlop={10} style={styles.eyeBtn}>
+          {amountsHidden ? <EyeOff size={20} color={Colors.text2} /> : <Eye size={20} color={Colors.accentLight} />}
+        </Pressable>
         <Button title="Add" icon={<Plus size={16} color="#fff" />} size="sm" onPress={openAdd} />
       </View>
 
-      <FlatList
+      <FlatList extraData={fmt} 
         data={accounts}
         keyExtractor={(a) => a.id}
         numColumns={2}
@@ -94,17 +96,23 @@ export default function Accounts() {
       />
 
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Account' : 'Edit Account'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Account' : 'Edit Account'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Account' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Account Name" value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} maxLength={MAX_NAME_LENGTH} placeholder="e.g. HDFC Savings" />
           <SelectField label="Type" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))}
             options={ACCOUNT_TYPES.map((t) => ({ label: t.replace('_', ' '), value: t }))} />
           <FormField label="Balance (₹)" keyboardType="numbers-and-punctuation" value={form.balance} onChangeText={setBalance} error={errors.balance} placeholder="0" />
           <SelectField label="Currency" value={form.currency} onChange={(v) => setForm((f) => ({ ...f, currency: v }))}
             options={CURRENCIES.map((c) => ({ label: c, value: c }))} />
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Account' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
     </SafeAreaView>
@@ -114,6 +122,7 @@ export default function Accounts() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, gap: Spacing.md },
+  eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
   title: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text1 },
   subtitle: { fontSize: FontSize.base, color: Colors.text2, marginTop: 2 },
   listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },

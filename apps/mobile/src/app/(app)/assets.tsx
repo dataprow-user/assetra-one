@@ -6,7 +6,6 @@ import { useApp, DEFAULT_ASSET_TYPES } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
-import { fmt, fmtSigned, fmtN } from '../../utils/format';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_NOTES_LENGTH, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Assets.jsx. The web version has a
@@ -36,7 +35,7 @@ const NUMERIC_RULES = {
 };
 
 export default function Assets() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { assets = [] } = state;
   const assetTypes = state.assetTypes && state.assetTypes.length > 0 ? state.assetTypes : DEFAULT_ASSET_TYPES;
   const { labels: TYPE_LABELS, colors: TYPE_COLORS } = getTypeMap(assetTypes);
@@ -162,7 +161,7 @@ export default function Assets() {
         />
       </View>
 
-      <FlatList
+      <FlatList extraData={fmt} 
         data={assets}
         keyExtractor={(a: any) => a.id}
         contentContainerStyle={styles.listContent}
@@ -216,7 +215,17 @@ export default function Assets() {
 
       {/* Add/Edit Asset Modal */}
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Asset' : 'Edit Asset'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Asset' : 'Edit Asset'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Asset' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <View style={styles.helpBox}>
             <Info size={14} color={Colors.accentLight} />
             <Text style={styles.helpText}>
@@ -260,10 +269,6 @@ export default function Assets() {
           <FormField label="Notes" hint="(optional)" value={form.notes} onChangeText={(v) => setForm((f: any) => ({ ...f, notes: v }))}
             maxLength={MAX_NOTES_LENGTH} placeholder="e.g. SBI FD maturing Dec 2025" />
 
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Asset' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
 
@@ -287,7 +292,17 @@ export default function Assets() {
 
       {/* Add/Edit Type Modal */}
       {typeModal && typeModal !== 'manage' && (
-        <AppModal visible title={typeModal.mode === 'add' ? 'Add Asset Type' : 'Edit Asset Type'} onClose={() => setTypeModal('manage')}>
+        <AppModal
+          visible
+          title={typeModal.mode === 'add' ? 'Add Asset Type' : 'Edit Asset Type'}
+          onClose={() => setTypeModal('manage')}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setTypeModal('manage')} style={{ flex: 1 }} />
+              <Button title={typeModal.mode === 'add' ? 'Add' : 'Update'} onPress={handleTypeSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Type Name" value={typeForm.label} onChangeText={(v) => setTypeForm((f: any) => ({ ...f, label: v }))}
             maxLength={MAX_SHORT_LENGTH} placeholder="e.g. Crypto, PPF" />
           <Text style={styles.label}>Color</Text>
@@ -296,10 +311,6 @@ export default function Assets() {
               <Pressable key={c} onPress={() => setTypeForm((f: any) => ({ ...f, color: c }))}
                 style={[styles.swatch, { backgroundColor: c }, typeForm.color === c && styles.swatchActive]} />
             ))}
-          </View>
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setTypeModal('manage')} style={{ flex: 1 }} />
-            <Button title={typeModal.mode === 'add' ? 'Add' : 'Update'} onPress={handleTypeSubmit} style={{ flex: 1 }} />
           </View>
         </AppModal>
       )}

@@ -208,26 +208,38 @@ export default function CategoryManager() {
       </ScrollView>
 
       {(modal === 'add-cat' || modal === 'edit-cat') && (
-        <AppModal visible title={modal === 'add-cat' ? 'Add Category' : 'Edit Category'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal === 'add-cat' ? 'Add Category' : 'Edit Category'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal === 'add-cat' ? 'Add' : 'Update'} onPress={handleCatSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Category Name" value={catForm.name} onChangeText={(v) => setCatForm((f: any) => ({ ...f, name: v }))} maxLength={MAX_NAME_LENGTH} placeholder="e.g. Outside Food" />
           {tab === 'expense' && (
             <SelectField label="Group" value={catForm.group} onChange={(v) => setCatForm((f: any) => ({ ...f, group: v }))}
               options={groups.map((g: any) => ({ label: g.name, value: g.name }))} />
           )}
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal === 'add-cat' ? 'Add' : 'Update'} onPress={handleCatSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
 
       {(modal === 'add-group' || modal === 'edit-group') && (
-        <AppModal visible title={modal === 'add-group' ? 'Add Group' : 'Edit Group'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal === 'add-group' ? 'Add Group' : 'Edit Group'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal === 'add-group' ? 'Add' : 'Update'} onPress={handleGroupSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Group Name" value={groupForm.name} onChangeText={(v) => setGroupForm((f: any) => ({ ...f, name: v }))} maxLength={MAX_NAME_LENGTH} placeholder="e.g. Discretionary" />
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal === 'add-group' ? 'Add' : 'Update'} onPress={handleGroupSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
     </SafeAreaView>

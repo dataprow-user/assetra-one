@@ -4,9 +4,9 @@ import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, Wallet, CreditCard, Banknote } from 'lucide-react';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, blockInvalidSignedNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmtBal as fmt } from '../utils/format';
 import './Accounts.css';
 
-const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 const ACCOUNT_TYPES = ['bank', 'wallet', 'credit_card', 'demat', 'cash'];
 const TYPE_ICONS = { bank: Wallet, wallet: Wallet, credit_card: CreditCard, demat: Banknote, cash: Banknote };
 const TYPE_COLORS = { bank: 'var(--green)', wallet: 'var(--blue)', credit_card: 'var(--red)', demat: 'var(--accent-light)', cash: 'var(--yellow)' };

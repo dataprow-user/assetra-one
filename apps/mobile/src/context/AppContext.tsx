@@ -6,6 +6,7 @@ import {
 } from '../data/mockData';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_GROUPS } from '../data/categories';
 import { getIdentity, clearIdentity } from '../utils/googleAuth';
+import { setAmountsHidden } from '../utils/format';
 import { Colors } from '../constants/theme';
 
 // Ported from apps/web/src/context/AppContext.jsx. Same reducer, same action
@@ -175,6 +176,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, null, emptyState);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [hydrated, setHydrated] = useState(false);
+  // Sensitive amounts are masked on every sign-in; the header eye-toggle
+  // reveals them for the session. Mirrors the web app's amountsHidden.
+  const [amountsHidden, setAmountsHiddenState] = useState(true);
+  // "Replay Welcome Guide" in Settings flips this; the app layout shows the
+  // OnboardingTour overlay whenever it's true, from any screen.
+  const [forceOnboarding, setForceOnboarding] = useState(false);
+  // True only for the moment right after an interactive Google sign-in this
+  // process — lets the app layout skip the PIN lock once, so a fresh sign-in
+  // doesn't immediately re-prompt for a PIN too. Resumed sessions (identity
+  // restored from storage on cold start) never set this, so they still lock.
+  const [justSignedIn, setJustSignedIn] = useState(false);
+
+  // Flip the format-module flag synchronously so the very next render (from
+  // this same state update) already shows the new masked/revealed state.
+  const toggleAmounts = () => setAmountsHiddenState((v) => { const next = !v; setAmountsHidden(next); return next; });
 
   // AsyncStorage is async (unlike localStorage), so we start from emptyState
   // synchronously and hydrate once on mount, gating the save-effect behind
@@ -201,7 +217,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(DATA_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, hydrated]);
 
-  const loginWithGoogle = (identity: any) => setCurrentUser(identity);
+  const loginWithGoogle = (identity: any) => {
+    // Always start a fresh session with amounts masked.
+    setAmountsHidden(true);
+    setAmountsHiddenState(true);
+    setJustSignedIn(true);
+    setCurrentUser(identity);
+  };
 
   const logout = async () => {
     // Signing out only ends the app session — Drive stays connected so the
@@ -212,8 +234,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+  // Restore an imported backup (same JSON shape the web/mobile apps export).
+  const importData = (payload: any) => dispatch({ type: 'HYDRATE', payload: normalizeLoaded(payload) });
+
+  const fmt = (n: any) => (amountsHidden ? '••••••' : '₹' + Math.abs(Number(n) || 0).toLocaleString('en-IN'));
+  const fmtSigned = (n: any) => {
+    if (amountsHidden) return '••••••';
+    const num = Number(n) || 0;
+    return (num < 0 ? '-' : '') + '₹' + Math.abs(num).toLocaleString('en-IN');
+  };
+  const fmtN = (n: any) => (amountsHidden ? '••••••' : Number(n || 0).toLocaleString('en-IN'));
+
   return (
-    <AppContext.Provider value={{ state, dispatch, currentUser, hydrated, loginWithGoogle, logout, uid }}>
+    <AppContext.Provider value={{ state, dispatch, currentUser, hydrated, loginWithGoogle, logout, uid, amountsHidden, toggleAmounts, importData, fmt, fmtSigned, fmtN, forceOnboarding, setForceOnboarding, justSignedIn, setJustSignedIn }}>
       {children}
     </AppContext.Provider>
   );

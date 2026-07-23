@@ -109,7 +109,7 @@
 
 .schedule-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
   gap: 8px; margin-bottom: 14px;
 }
 .schedule-btn {
@@ -181,4 +181,18 @@
 }
 .folder-list-item:hover { background: var(--panel-hover); border-color: var(--border); }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .settings-toast { left: 12px; right: 12px; bottom: 16px; max-width: none; }
+  /* Danger rows: title/desc above, button full-width below */
+  .danger-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .danger-row .btn, .danger-row .btn-warning { width: 100%; }
+  /* Drive-connected row wraps its action buttons to their own line */
+  .folder-connected > div:last-child { width: 100%; }
+  .folder-connected > div:last-child .btn { flex: 1; }
+  /* Report controls each take a full row */
+  .report-controls { flex-direction: column; align-items: stretch !important; }
+  .report-controls .form-group, .report-controls .btn { width: 100%; }
+}
 

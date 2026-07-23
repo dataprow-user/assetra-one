@@ -4,6 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, ShieldCheck, CloudCog, Wallet, TrendingUp, PieChart } from 'lucide-react-native';
 import BrandMark from '../components/BrandMark';
+import GoogleLogo from '../components/ui/GoogleLogo';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { useApp } from '../context/AppContext';
 import { useGoogleSignIn } from '../utils/googleAuth';
 import { trackUserEvent } from '../utils/userTracker';
@@ -26,6 +28,7 @@ export default function Login() {
   const { ready, signIn } = useGoogleSignIn();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleSignIn = async () => {
     setError('');
@@ -64,7 +67,10 @@ export default function Login() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.signInText}>Sign in with Google</Text>
+                  <>
+                    <View style={styles.googleBadge}><GoogleLogo size={18} /></View>
+                    <Text style={styles.signInText}>Sign in with Google</Text>
+                  </>
                 )}
               </LinearGradient>
             </Pressable>
@@ -75,11 +81,13 @@ export default function Login() {
             </Text>
 
             <View style={styles.cardFooter}>
-              <Pressable onPress={() => Linking.openURL('https://assetra.app/privacy')}>
+              <Pressable onPress={() => setShowPrivacy(true)}>
                 <Text style={styles.footerLink}>Privacy Policy</Text>
               </Pressable>
             </View>
           </View>
+
+          {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
 
           <View style={styles.trustStrip}>
             {TRUST_BADGES.map(({ icon: Icon, label }) => (
@@ -121,7 +129,8 @@ const styles = StyleSheet.create({
   cardSubtitle: { fontSize: FontSize.base, color: Colors.text2, textAlign: 'center', marginBottom: Spacing.lg },
   errorBox: { backgroundColor: Colors.redBg, borderWidth: 1, borderColor: 'rgba(244,63,94,0.3)', borderRadius: Radius.sm, padding: 10, marginBottom: Spacing.md },
   errorText: { color: Colors.red, fontSize: FontSize.sm, textAlign: 'center' },
-  signInBtn: { paddingVertical: 15, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
+  signInBtn: { flexDirection: 'row', gap: 10, paddingVertical: 15, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
+  googleBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   signInText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
   helperText: { fontSize: FontSize.sm, color: Colors.text2, textAlign: 'center', marginTop: Spacing.md, lineHeight: 18 },
   cardFooter: { alignItems: 'center', marginTop: Spacing.lg, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },

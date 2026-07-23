@@ -4,9 +4,9 @@ import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, CalendarDays, ChevronDown, ChevronRight, Receipt } from 'lucide-react';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmt } from '../utils/format';
 import './Events.css';
 
-const fmt = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
 const emptyForm = () => ({ name:'', startDate:'', endDate:'', budget:'' });
 
 const NUMERIC_RULES = {

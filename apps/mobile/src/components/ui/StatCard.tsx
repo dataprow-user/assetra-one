@@ -17,7 +17,7 @@ export default function StatCard({
           <Icon size={16} color={iconColor} />
         </View>
       </View>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.value} numberOfLines={1}>{value}</Text>
       {sub ? <Text style={[styles.sub, { color: subColor }]}>{sub}</Text> : null}
     </Card>
   );

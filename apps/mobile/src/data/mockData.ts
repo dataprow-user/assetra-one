@@ -28,10 +28,11 @@ export const SEED_LIABILITIES = [
   { id: 'lib-gold-001', name: 'Gold Loan', type: 'gold_loan', principal: 50000, interestRate: 9, tenureMonths: 12, emi: 4392, startDate: '2026-04-01', outstanding: 37500, collateral: 'asset-gold-001' },
 ];
 
+// Dated to match SEED_TRANSACTIONS (July 2026) — "spent" is computed live by
+// matching transactions to category/subcategory, not stored on the budget.
 export const SEED_BUDGETS = [
-  { id: 'bud-001', name: 'Groceries', scope: 'category', category: 'Groceries', amount: 8000, spent: 6560, period: 'monthly', alertPct: 80 },
-  { id: 'bud-002', name: 'Entertainment', scope: 'category', category: 'Entertainment', amount: 3000, spent: 1200, period: 'monthly', alertPct: 80 },
-  { id: 'bud-003', name: 'Goa Trip Budget', scope: 'event', category: null, amount: 60000, spent: 22400, period: 'one_time', alertPct: 80 },
+  { id: 'bud-001', month: 'July', year: 2026, group: 'Needs', category: 'Groceries', subcategory: '', plannedAmount: 8000, notes: '' },
+  { id: 'bud-002', month: 'July', year: 2026, group: 'Wants', category: 'Entertainment', subcategory: '', plannedAmount: 3000, notes: '' },
 ];
 
 export const SEED_EVENTS = [

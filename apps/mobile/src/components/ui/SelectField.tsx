@@ -49,7 +49,7 @@ export default function SelectField({
             </View>
             <FlatList
               data={options}
-              keyExtractor={(item) => item.value}
+              keyExtractor={(item) => String(item.value)}
               style={{ maxHeight: 380 }}
               renderItem={({ item }) => (
                 <Pressable
@@ -84,10 +84,10 @@ const styles = StyleSheet.create({
   valueText: { fontSize: FontSize.md, color: Colors.text1, flex: 1 },
   placeholder: { color: Colors.text3 },
   error: { marginTop: 5, color: Colors.red, fontSize: FontSize.sm },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: Spacing.lg },
   sheet: {
-    backgroundColor: '#141824', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.borderStrong, paddingBottom: Spacing.xl, ...Shadow.xl,
+    backgroundColor: '#141824', borderRadius: Radius.lg, maxHeight: '80%',
+    borderWidth: 1, borderColor: Colors.borderStrong, paddingBottom: Spacing.sm, overflow: 'hidden', ...Shadow.xl,
   },
   sheetHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

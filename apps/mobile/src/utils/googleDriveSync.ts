@@ -30,6 +30,36 @@ export async function disconnectDrive() {
 }
 
 /**
+ * Silently gets a fresh Drive access token from the native Google Sign-In
+ * SDK — it holds a refresh token internally and renews under the hood, no
+ * user interaction needed, as long as the Drive scope was already granted.
+ */
+async function refreshDriveAuth() {
+  const tokens = await GoogleSignin.getTokens();
+  if (!tokens?.accessToken) throw new Error('AUTH_EXPIRED');
+  const authData = { accessToken: tokens.accessToken, expiresAt: Date.now() + 55 * 60 * 1000 };
+  await saveDriveAuth(authData);
+  return authData;
+}
+
+/** fetch with the current Drive token; on a 401, refreshes once and retries before giving up. */
+async function authorizedFetch(url: string, options: RequestInit = {}, _retried = false): Promise<Response> {
+  const auth = await getDriveAuth();
+  if (!auth) throw new Error('Not connected to Google Drive.');
+
+  const res = await fetch(url, {
+    ...options,
+    headers: { ...(options.headers as any), Authorization: `Bearer ${auth.accessToken}` },
+  });
+
+  if (res.status === 401 && !_retried) {
+    await refreshDriveAuth();
+    return authorizedFetch(url, options, true);
+  }
+  return res;
+}
+
+/**
  * Requests Drive access as its own step, separate from signing in — same
  * split as the web app. Requires the user to already be signed in (via
  * useGoogleSignIn) since addScopes is an incremental authorization on the
@@ -65,13 +95,7 @@ export function useGoogleDriveConnect() {
 // ── Drive API Operations ─────────────────────────────────────────────────
 
 async function driveApi(path: string, options: RequestInit = {}) {
-  const auth = await getDriveAuth();
-  if (!auth) throw new Error('Not connected to Google Drive.');
-
-  const res = await fetch(`https://www.googleapis.com/drive/v3/${path}`, {
-    ...options,
-    headers: { ...(options.headers as any), Authorization: `Bearer ${auth.accessToken}` },
-  });
+  const res = await authorizedFetch(`https://www.googleapis.com/drive/v3/${path}`, options);
 
   if (res.status === 401) throw new Error('AUTH_EXPIRED');
   if (!res.ok) {
@@ -104,26 +128,31 @@ async function findExistingFile(filename: string, folderId: string) {
 
 /** Uploads a JSON string to the AssetraBackups folder, creating or updating the file. */
 export async function uploadToDrive(jsonString: string, filename: string) {
-  const auth = await getDriveAuth();
-  if (!auth) throw new Error('Not connected to Google Drive.');
-
   const folderId = await getOrCreateFolder();
   const existingFileId = await findExistingFile(filename, folderId);
 
   const metadata = existingFileId ? {} : { name: filename, parents: folderId ? [folderId] : undefined };
 
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }) as any);
-  form.append('file', new Blob([jsonString], { type: 'application/json' }) as any);
+  // Build the multipart/related body by hand — React Native's fetch does not
+  // support Blob/FormData multipart uploads, so a string body is used instead.
+  const boundary = 'assetra_boundary_7MA4YWxkTrZu0gW';
+  const body =
+    `--${boundary}\r\n` +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    `${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\n` +
+    'Content-Type: application/json\r\n\r\n' +
+    `${jsonString}\r\n` +
+    `--${boundary}--`;
 
   const url = existingFileId
     ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`
     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
 
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     method: existingFileId ? 'PATCH' : 'POST',
-    headers: { Authorization: `Bearer ${auth.accessToken}` },
-    body: form,
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body,
   });
 
   if (res.status === 401) throw new Error('AUTH_EXPIRED');
@@ -140,22 +169,21 @@ export async function getCloudModificationTime(filename: string): Promise<string
     const query = `'${folderId}' in parents and name='${filename}' and trashed=false`;
     const data = await driveApi(`files?q=${encodeURIComponent(query)}&fields=files(id,modifiedTime)&t=${Date.now()}`);
     return data.files && data.files.length > 0 ? data.files[0].modifiedTime : null;
-  } catch (err) {
-    console.error('Failed to get cloud modification time', err);
+  } catch {
+    // Silent — a background check failing (expired auth after a failed
+    // refresh, network hiccup, etc.) shouldn't surface a dev-mode error
+    // overlay; callers already treat a null return as "nothing to sync".
     return null;
   }
 }
 
 export async function downloadLatestBackup(filename: string) {
-  const auth = await getDriveAuth();
-  if (!auth) throw new Error('Not connected to Google Drive.');
-
   const folderId = await getOrCreateFolder();
   const fileId = await findExistingFile(filename, folderId);
   if (!fileId) throw new Error('Backup file not found in Google Drive.');
 
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&t=${Date.now()}`, {
-    headers: { Authorization: `Bearer ${auth.accessToken}`, 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  const res = await authorizedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&t=${Date.now()}`, {
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
   });
 
   if (res.status === 401) throw new Error('AUTH_EXPIRED');

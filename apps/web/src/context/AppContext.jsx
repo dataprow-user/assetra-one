@@ -8,6 +8,7 @@ import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_GROUPS }
 const AppContext = createContext(null);
 
 import { getIdentity, clearIdentity } from '../utils/googleAuth';
+import { areAmountsHidden, setAmountsHidden } from '../utils/format';
 
 const DATA_KEY = 'a1_data';
 
@@ -220,11 +221,25 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, initialState);
   const [currentUser, setCurrentUser] = React.useState(() => getIdentity());
 
+  // Sensitive amounts are masked on every fresh app open; the eye toggle in the
+  // header flips this. Kept in state (mirroring the format.js module flag) so a
+  // toggle re-renders the whole tree and every fmt() call re-evaluates.
+  const [amountsHidden, setAmountsHiddenState] = React.useState(() => areAmountsHidden());
+  const toggleAmounts = () => {
+    const next = !amountsHidden;
+    setAmountsHidden(next);
+    setAmountsHiddenState(next);
+  };
+
   useEffect(() => {
     localStorage.setItem(DATA_KEY, JSON.stringify(state));
   }, [state]);
 
   const loginWithGoogle = (identity) => {
+    // Always mask sensitive amounts on sign-in — even if the previous session
+    // (same page load) had revealed them.
+    setAmountsHidden(true);
+    setAmountsHiddenState(true);
     setCurrentUser(identity);
   };
 
@@ -233,13 +248,17 @@ export function AppProvider({ children }) {
     // user isn't asked to reconnect it every time they sign back in.
     clearIdentity();
     setCurrentUser(null);
+    // Reset the reveal so the next sign-in starts masked.
+    setAmountsHidden(true);
+    setAmountsHiddenState(true);
   };
 
   const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   return (
     <AppContext.Provider value={{
-      state, dispatch, currentUser, loginWithGoogle, logout, uid
+      state, dispatch, currentUser, loginWithGoogle, logout, uid,
+      amountsHidden, toggleAmounts
     }}>
       {children}
     </AppContext.Provider>

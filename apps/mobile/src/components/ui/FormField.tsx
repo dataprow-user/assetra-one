@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
   label: { fontSize: FontSize.base, fontWeight: '500', color: Colors.text2 },
   hint: { fontSize: FontSize.sm, color: Colors.text3 },
   input: {
-    width: '100%', paddingVertical: 11, paddingHorizontal: 14, borderRadius: Radius.sm,
+    width: '100%', height: 48, paddingHorizontal: 14, borderRadius: Radius.sm,
     borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)',
     color: Colors.text1, fontSize: FontSize.md,
   },

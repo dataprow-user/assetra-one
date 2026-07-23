@@ -5,10 +5,8 @@ import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, TrendingUp, Info, LayoutList, BarChart2, Settings2, X } from 'lucide-react';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_NOTES_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmt, fmtN } from '../utils/format';
 import './Assets.css';
-
-const fmt  = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
-const fmtN = (n) => Number(n||0).toLocaleString('en-IN');
 
 const getTypeMap = (types) => {
   const labels = {}, colors = {};

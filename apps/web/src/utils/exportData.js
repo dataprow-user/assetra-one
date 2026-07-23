@@ -114,6 +114,79 @@ export function exportCSV(rows, cols, label) {
   downloadBlob(new Blob([csv], { type: 'text/csv' }), `assetra-${label}-${dateTag()}.csv`);
 }
 
+// ── Monthly / Yearly report ────────────────────────────────────────────────────
+// Filters transactions to a period, then downloads a multi-sheet Excel report:
+//   • Summary   — income / expense / net + a per-category expense breakdown
+//   • Transactions — every txn in the period
+// `period` is 'monthly' | 'yearly'; month is 1-12 (ignored for yearly).
+// Returns { count, income, expense, net } so the caller can show a toast.
+export function exportReport(state, { period, year, month }) {
+  const y = String(year);
+  const m = String(month).padStart(2, '0');
+  const prefix = period === 'yearly' ? y : `${y}-${m}`;
+
+  const txns = (state.transactions || [])
+    .filter(t => typeof t.date === 'string' && t.date.startsWith(prefix))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+  const sum = (type) => txns
+    .filter(t => t.type === type)
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const income = sum('income');
+  const expense = sum('expense');
+  const net = income - expense;
+
+  // Per-category expense breakdown
+  const byCat = {};
+  txns.filter(t => t.type === 'expense').forEach(t => {
+    const key = t.category || 'Uncategorized';
+    byCat[key] = (byCat[key] || 0) + (Number(t.amount) || 0);
+  });
+
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  const periodLabel = period === 'yearly' ? y : `${MONTH_NAMES[Number(month) - 1]} ${y}`;
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryRows = [
+    { Metric: 'Report Type', Value: period === 'yearly' ? 'Yearly' : 'Monthly' },
+    { Metric: 'Period', Value: periodLabel },
+    { Metric: 'Household', Value: state.household?.name || '' },
+    { Metric: 'Transactions', Value: txns.length },
+    { Metric: 'Total Income', Value: income },
+    { Metric: 'Total Expense', Value: expense },
+    { Metric: 'Net Savings', Value: net },
+    { Metric: '', Value: '' },
+    { Metric: 'Expense by Category', Value: '' },
+    ...Object.entries(byCat)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, amt]) => ({ Metric: cat, Value: amt })),
+  ];
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(summaryRows, { header: ['Metric', 'Value'] }),
+    'Summary',
+  );
+
+  // Transactions sheet
+  const cols = ['date','type','group','category','subcategory','amount','account','notes'];
+  const txRows = txns.map(r => { const o = {}; cols.forEach(c => { o[c] = r[c] ?? ''; }); return o; });
+  const txWs = txRows.length > 0
+    ? XLSX.utils.json_to_sheet(txRows, { header: cols })
+    : XLSX.utils.aoa_to_sheet([cols]);
+  XLSX.utils.book_append_sheet(wb, txWs, 'Transactions');
+
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  downloadBlob(
+    new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `assetra-report-${period}-${prefix}.xlsx`,
+  );
+
+  return { count: txns.length, income, expense, net };
+}
+
 // ── Generate Blob for Cloud Sync ──────────────────────────────────────────────
 export function getExportBlob(state, format) {
   if (format === 'json') {

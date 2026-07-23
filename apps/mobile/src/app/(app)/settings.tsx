@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Home, User, Save, LogOut, Trash2, RefreshCcw, FlaskConical,
-  CheckCircle2, AlertTriangle, CloudUpload, Edit2,
+  CheckCircle2, AlertTriangle, CloudUpload, Edit2, Download, Upload, FileSpreadsheet, Lock,
 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { Card, Button, Badge, FormField, SelectField, AppModal, ScreenHeader, Toast } from '../../components/ui';
@@ -11,6 +12,18 @@ import { useToast } from '../../hooks/useToast';
 import { MAX_NAME_LENGTH } from '../../utils/validation';
 import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
 import { getDriveAuth, disconnectDrive, uploadToDrive, useGoogleDriveConnect } from '../../utils/googleDriveSync';
+import { exportJSON, exportCSV, exportExcel, exportReport, pickBackupJson } from '../../utils/dataTransfer';
+import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
+import PinSetupModal from '../../components/PinSetupModal';
+import { hasPin as checkHasPin, clearPin } from '../../utils/appLock';
+
+const REPORT_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+const LAST_BACKUP_KEY = 'a1_last_backup';
+function formatBackup(ts: number | null): string {
+  if (!ts) return 'Never';
+  return new Date(ts).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 // Ported from apps/web/src/pages/Settings.jsx. Export/Import (JSON/Excel/CSV)
 // and the backup-schedule picker are intentionally not ported here — they
@@ -22,8 +35,9 @@ import { getDriveAuth, disconnectDrive, uploadToDrive, useGoogleDriveConnect } f
 const RELATION_OPTIONS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other'];
 
 export default function Settings() {
-  const { state, dispatch, currentUser, logout, uid } = useApp();
+  const { state, dispatch, currentUser, logout, uid, importData, setForceOnboarding } = useApp();
   const { toast, showToast } = useToast();
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // ── Household ────────────────────────────────────────────────────────────
   const [householdName, setHouseholdName] = useState(state.household?.name || '');
@@ -35,18 +49,92 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  // ── App Lock (PIN) ───────────────────────────────────────────────────────
+  const [pinSet, setPinSet] = useState(false);
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  useEffect(() => { checkHasPin().then(setPinSet); }, []);
+
+  const handleRemovePin = () => {
+    Alert.alert('Remove App PIN?', "You'll go straight to the app without a PIN prompt.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => { await clearPin(); setPinSet(false); showToast('success', 'App PIN removed.'); } },
+    ]);
+  };
+
+  // ── Export / Import / Report ────────────────────────────────────────────
+  const [exportModal, setExportModal] = useState(false);
+  const handleExport = async (fmtType: 'json' | 'excel' | 'csv') => {
+    setExportModal(false);
+    try {
+      if (fmtType === 'json') await exportJSON(state);
+      else if (fmtType === 'csv') await exportCSV(state);
+      else await exportExcel(state);
+      showToast('success', 'Export ready — choose where to save or share it.');
+    } catch (e: any) {
+      showToast('error', e?.message || 'Export failed.');
+    }
+  };
+
+  const handleImport = () => {
+    Alert.alert(
+      'Import backup',
+      'This will REPLACE all current data with the contents of the backup file. This cannot be undone. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Choose file',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const data = await pickBackupJson();
+              if (!data) return;
+              importData(data);
+              const n = data.transactions?.length || 0;
+              showToast('success', `Backup imported successfully — ${n} transaction${n === 1 ? '' : 's'} restored.`);
+            } catch (e: any) {
+              showToast('error', e?.message || "Couldn't read that file. Please pick an Assetra JSON backup.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const now = new Date();
+  const REPORT_YEARS = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [reportYear, setReportYear] = useState(now.getFullYear());
+  const [reportMonth, setReportMonth] = useState(now.getMonth() + 1);
+  const handleDownloadReport = async () => {
+    try {
+      const r = await exportReport(state, { period: reportPeriod, year: reportYear, month: reportMonth });
+      showToast('success', `Report ready — ${r.count} transaction${r.count === 1 ? '' : 's'} in the period.`);
+    } catch (e: any) {
+      showToast('error', e?.message || 'Report generation failed.');
+    }
+  };
+
   // ── Google Drive ─────────────────────────────────────────────────────────
   const [driveConnected, setDriveConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'done' | 'error' | null>(null);
+  const [lastBackup, setLastBackup] = useState('Never');
   const { connect } = useGoogleDriveConnect();
 
   useEffect(() => {
     (async () => {
       const auth = await getDriveAuth();
       setDriveConnected(!!auth);
+      const raw = await AsyncStorage.getItem(LAST_BACKUP_KEY);
+      setLastBackup(formatBackup(raw ? Number(raw) : null));
     })();
   }, []);
+
+  const markBackupNow = async () => {
+    const ts = Date.now();
+    await AsyncStorage.setItem(LAST_BACKUP_KEY, String(ts));
+    setLastBackup(formatBackup(ts));
+  };
 
   const handleConnectDrive = async () => {
     setConnecting(true);
@@ -80,6 +168,7 @@ export default function Settings() {
     setSyncStatus('syncing');
     try {
       await uploadToDrive(JSON.stringify(state), 'Assetra-Backup.json');
+      await markBackupNow();
       setSyncStatus('done');
       showToast('success', 'Backup uploaded to Google Drive successfully!');
       setTimeout(() => setSyncStatus(null), 3000);
@@ -141,20 +230,36 @@ export default function Settings() {
   };
 
   // ── Danger Zone ──────────────────────────────────────────────────────────
+  // Resetting is destructive, so a timestamped safety snapshot is saved first
+  // (to Google Drive if connected, else a local backup file), then wiped.
+  const doReset = async () => {
+    let backedUp = false;
+    if (driveConnected) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const d = new Date();
+      const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+      try {
+        await uploadToDrive(JSON.stringify(state), `Assetra-Backup-${stamp}.json`);
+        backedUp = true;
+      } catch {}
+    } else {
+      try { await exportJSON(state); backedUp = true; } catch {}
+    }
+    dispatch({ type: 'RESET_ALL' });
+    showToast('success', backedUp ? 'Backup saved. Data cleared — signing out…' : 'Data cleared — signing out…');
+    setTimeout(() => logout(), 1600);
+  };
+
   const handleReset = () => {
     Alert.alert(
       'Reset All Data?',
-      'This will permanently delete all your data — transactions, assets, accounts, budgets, events, insurance — and start completely fresh.',
+      'This will permanently delete all your data — transactions, assets, accounts, budgets, events, insurance — and start completely fresh.\n\n' +
+      (driveConnected
+        ? 'A timestamped backup will be saved to your Google Drive (AssetraBackups) first, then you\'ll be signed out.'
+        : 'You\'ll first be offered a backup file to save, then signed out.'),
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Yes, Reset Everything',
-          style: 'destructive',
-          onPress: () => {
-            dispatch({ type: 'RESET_ALL' });
-            showToast('success', 'All data cleared.');
-          },
-        },
+        { text: 'Yes, Reset Everything', style: 'destructive', onPress: doReset },
       ],
     );
   };
@@ -181,7 +286,27 @@ export default function Settings() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenHeader title="Settings" subtitle="Manage your household, data, backup and account preferences" showBack />
+        <ScreenHeader title="Settings" subtitle="Manage your household, data, backup and account preferences" showBack hideEye />
+
+        {/* App Lock */}
+        <Card style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Lock size={18} color={Colors.text2} />
+            <Text style={styles.sectionTitle}>App Lock</Text>
+          </View>
+          <Text style={styles.sectionDesc}>
+            {pinSet
+              ? 'A PIN is required each time you open the app — no need to sign in with Google every time.'
+              : 'Set a PIN to unlock the app quickly, without signing in with Google each time.'}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            <Button title={pinSet ? 'Change PIN' : 'Set PIN'} icon={<Lock size={14} color="#fff" />} onPress={() => setShowPinSetup(true)} style={{ flex: 1 }} />
+            {pinSet && <Button title="Remove PIN" variant="ghost" onPress={handleRemovePin} style={{ flex: 1 }} />}
+          </View>
+          {pinSet && (
+            <Text style={styles.sectionDesc}>Forgot your PIN? Sign out and sign back in with Google, then set a new one here.</Text>
+          )}
+        </Card>
 
         {/* Household */}
         <Card style={styles.section}>
@@ -217,18 +342,39 @@ export default function Settings() {
           </View>
           <View style={styles.profileActions}>
             <Button title="Sign Out" variant="danger" icon={<LogOut size={15} color={Colors.red} />} onPress={() => logout()} style={{ flex: 1 }} />
-            <Button
-              title="Privacy Policy"
-              variant="ghost"
-              onPress={() =>
-                Alert.alert(
-                  'Privacy Policy',
-                  'Assetra One stores all your data locally and syncs only to your own Google Drive if you connect it.',
-                )
-              }
-              style={{ flex: 1 }}
-            />
+            <Button title="Privacy Policy" variant="ghost" onPress={() => setShowPrivacy(true)} style={{ flex: 1 }} />
           </View>
+          <Button title="Replay Welcome Guide" variant="ghost" onPress={() => setForceOnboarding(true)} style={{ marginTop: Spacing.sm }} />
+        </Card>
+
+        {/* Export & Import */}
+        <Card style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Download size={18} color={Colors.text2} />
+            <Text style={styles.sectionTitle}>Export & Import</Text>
+          </View>
+          <Text style={styles.sectionDesc}>Your data stays 100% private — export a backup or import one to restore.</Text>
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            <Button title="Export Data" icon={<Download size={14} color="#fff" />} onPress={() => setExportModal(true)} style={{ flex: 1 }} />
+            <Button title="Import Backup" variant="ghost" icon={<Upload size={14} color={Colors.text1} />} onPress={handleImport} style={{ flex: 1 }} />
+          </View>
+        </Card>
+
+        {/* Download Report */}
+        <Card style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <FileSpreadsheet size={18} color={Colors.text2} />
+            <Text style={styles.sectionTitle}>Download Report</Text>
+          </View>
+          <SelectField label="Period" value={reportPeriod} onChange={(v) => setReportPeriod(v as 'monthly' | 'yearly')}
+            options={[{ label: 'Monthly', value: 'monthly' }, { label: 'Yearly', value: 'yearly' }]} />
+          {reportPeriod === 'monthly' && (
+            <SelectField label="Month" value={String(reportMonth)} onChange={(v) => setReportMonth(Number(v))}
+              options={REPORT_MONTHS.map((m, i) => ({ label: m, value: String(i + 1) }))} />
+          )}
+          <SelectField label="Year" value={String(reportYear)} onChange={(v) => setReportYear(Number(v))}
+            options={REPORT_YEARS.map((y) => ({ label: String(y), value: String(y) }))} />
+          <Button title="Download Report" icon={<Download size={14} color="#fff" />} onPress={handleDownloadReport} />
         </Card>
 
         {/* Google Drive Backup */}
@@ -256,6 +402,15 @@ export default function Settings() {
             </View>
           </View>
 
+          <Badge
+            label={driveConnected ? '● Auto Sync: Enabled' : '○ Auto Sync: Disabled'}
+            color={driveConnected ? Colors.green : Colors.text2}
+            style={{ alignSelf: 'flex-start' }}
+          />
+          {driveConnected && (
+            <Text style={styles.sectionDesc}>Changes save to Drive automatically a few seconds after you make them — no action needed.</Text>
+          )}
+
           {driveConnected ? (
             <View style={styles.driveActions}>
               <Button
@@ -268,7 +423,9 @@ export default function Settings() {
               />
               <Button title="Disconnect" variant="ghost" size="sm" onPress={handleDisconnectDrive} style={{ flex: 1 }} />
             </View>
-          ) : (
+          ) : null}
+          <Text style={styles.driveMeta}>Last backup: {lastBackup}</Text>
+          {!driveConnected && (
             <Button
               title={connecting ? 'Connecting…' : 'Connect Google Drive'}
               icon={connecting ? undefined : <CloudUpload size={14} color="#fff" />}
@@ -348,7 +505,17 @@ export default function Settings() {
       </ScrollView>
 
       {memberModal && (
-        <AppModal visible title={editingMember ? 'Edit Member' : 'Add Family Member'} onClose={() => setMemberModal(false)}>
+        <AppModal
+          visible
+          title={editingMember ? 'Edit Member' : 'Add Family Member'}
+          onClose={() => setMemberModal(false)}
+          footer={
+            <View style={styles.modalActions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setMemberModal(false)} style={{ flex: 1 }} />
+              <Button title={editingMember ? 'Save Changes' : 'Add Member'} onPress={handleMemberSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField
             label="Full Name"
             value={memberForm.name}
@@ -362,13 +529,24 @@ export default function Settings() {
             onChange={(v) => setMemberForm((f) => ({ ...f, relation: v }))}
             options={RELATION_OPTIONS.map((r) => ({ label: r, value: r }))}
           />
-          <View style={styles.modalActions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setMemberModal(false)} style={{ flex: 1 }} />
-            <Button title={editingMember ? 'Save Changes' : 'Add Member'} onPress={handleMemberSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
 
+      {exportModal && (
+        <AppModal visible title="Export Data" onClose={() => setExportModal(false)}>
+          <Button title="JSON (full backup)" onPress={() => handleExport('json')} style={{ marginBottom: Spacing.md }} />
+          <Button title="Excel (.xlsx)" variant="secondary" onPress={() => handleExport('excel')} style={{ marginBottom: Spacing.md }} />
+          <Button title="CSV (transactions only)" variant="ghost" onPress={() => handleExport('csv')} />
+        </AppModal>
+      )}
+
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
+      {showPinSetup && (
+        <PinSetupModal
+          onClose={() => setShowPinSetup(false)}
+          onSaved={() => { setShowPinSetup(false); setPinSet(true); showToast('success', 'App PIN saved.'); }}
+        />
+      )}
       <Toast toast={toast} />
     </SafeAreaView>
   );

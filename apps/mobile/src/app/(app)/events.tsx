@@ -6,7 +6,6 @@ import { useApp } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, DateField, ScreenHeader, Badge, ProgressBar } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
-import { fmt } from '../../utils/format';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Events.jsx — event cards with live
@@ -20,7 +19,7 @@ const NUMERIC_RULES: Record<string, any> = {
 };
 
 export default function Events() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { events = [], transactions = [] } = state;
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState<any>(emptyForm());
@@ -158,7 +157,17 @@ export default function Events() {
 
       {/* Add/Edit Modal */}
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Event' : 'Edit Event'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Event' : 'Edit Event'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Event' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Event Name" value={form.name} onChangeText={(v) => setForm((f: any) => ({ ...f, name: v }))}
             maxLength={MAX_NAME_LENGTH} placeholder="e.g. Goa Trip 2026" />
           <View style={styles.dateRow}>
@@ -168,10 +177,6 @@ export default function Events() {
           <FormField label="Budget (₹)" hint="(optional)" keyboardType="decimal-pad" value={form.budget} onChangeText={setBudget}
             error={errors.budget} placeholder="e.g. 50000" />
           <Text style={styles.helperText}>Tag transactions to this event using the "Link to Event" field in Add Transaction.</Text>
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Event' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
     </SafeAreaView>

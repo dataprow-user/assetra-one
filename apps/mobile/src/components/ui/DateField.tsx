@@ -6,8 +6,8 @@ import { Colors, Radius, FontSize, Spacing } from '../../constants/theme';
 
 // value/onChange use 'YYYY-MM-DD' strings — same format the reducer/exports expect.
 export default function DateField({
-  label, value, onChange, style,
-}: { label: string; value: string; onChange: (v: string) => void; style?: any }) {
+  label, value, onChange, style, maximumDate, minimumDate,
+}: { label: string; value: string; onChange: (v: string) => void; style?: any; maximumDate?: Date; minimumDate?: Date }) {
   const [open, setOpen] = useState(false);
   const dateValue = value ? new Date(value) : new Date();
 
@@ -30,6 +30,8 @@ export default function DateField({
           mode="date"
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
           onChange={handleChange}
+          maximumDate={maximumDate}
+          minimumDate={minimumDate}
           themeVariant="dark"
         />
       )}

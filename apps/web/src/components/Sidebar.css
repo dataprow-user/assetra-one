@@ -25,6 +25,9 @@
 .sidebar-collapse-arrow { display: flex; align-items: center; color: var(--text-3); flex-shrink: 0; }
 .sidebar.collapsed .sidebar-brand { justify-content: center; gap: 8px; padding-left: 0; padding-right: 0; }
 .sidebar.collapsed .nav-item { justify-content: center; }
+/* Desktop collapse hides the text labels (icons only) */
+.sidebar.collapsed .brand-name,
+.sidebar.collapsed .nav-item-label { display: none; }
 .brand-logo {
   width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px;
   background: var(--accent-gradient);
@@ -53,3 +56,42 @@
   border: 1px solid rgba(99,102,241,0.25);
 }
 .nav-item svg { flex-shrink: 0; }
+
+/* Backdrop behind the mobile drawer — hidden on desktop */
+.sidebar-backdrop { display: none; }
+
+/* ── Mobile: sidebar becomes an off-canvas drawer ── */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    height: 100vh;
+    width: 264px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1001;
+    /* Solid (opaque) background so page content doesn't show through the drawer */
+    background: var(--bg-secondary);
+  }
+  /* On mobile the drawer always shows the full-width nav, even if the
+     desktop "collapsed" state was left on. */
+  .sidebar.collapsed { width: 264px; }
+  .sidebar.collapsed .sidebar-brand { justify-content: space-between; }
+  .sidebar.collapsed .brand-name,
+  .sidebar.collapsed .nav-item-label { display: inline; }
+  .sidebar.collapsed .nav-item { justify-content: flex-start; }
+
+  .sidebar.mobile-open { transform: translateX(0); box-shadow: var(--shadow-xl); }
+
+  /* The collapse toggle is meaningless on mobile — hide it */
+  .sidebar-collapse-arrow { display: none; }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+  }
+}

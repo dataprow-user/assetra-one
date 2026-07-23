@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, Pressable, TextInput, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Edit2, Trash2, Wallet, Search } from 'lucide-react-native';
+import { Edit2, Trash2, Wallet, Search, Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
 import { Card, Badge, EmptyState, Button, Toast } from '../../../components/ui';
 import { useToast } from '../../../hooks/useToast';
 import TransactionFormModal from '../../../components/TransactionFormModal';
 import { Colors, FontSize, Spacing, Radius } from '../../../constants/theme';
-import { fmt } from '../../../utils/format';
 import { useRouter } from 'expo-router';
 
 export default function Transactions() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, fmt, fmtSigned, fmtN, amountsHidden, toggleAmounts } = useApp();
   const { transactions = [], accounts = [], events = [] } = state;
   const router = useRouter();
   const { toast, showToast } = useToast();
@@ -40,11 +39,16 @@ export default function Transactions() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Transactions</Text>
-        <Text style={styles.subtitle}>
-          {filtered.length} records • Income: <Text style={{ color: Colors.green }}>{fmt(totalIncome)}</Text> • Expenses: <Text style={{ color: Colors.red }}>{fmt(totalExpense)}</Text>
-        </Text>
+      <View style={[styles.header, { flexDirection: 'row', alignItems: 'center', gap: Spacing.md }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Transactions</Text>
+          <Text style={styles.subtitle}>
+            {filtered.length} records • Income: <Text style={{ color: Colors.green }}>{fmt(totalIncome)}</Text> • Expenses: <Text style={{ color: Colors.red }}>{fmt(totalExpense)}</Text>
+          </Text>
+        </View>
+        <Pressable onPress={toggleAmounts} hitSlop={10} style={styles.eyeBtn}>
+          {amountsHidden ? <EyeOff size={20} color={Colors.text2} /> : <Eye size={20} color={Colors.accentLight} />}
+        </Pressable>
       </View>
 
       {accounts.length === 0 && (
@@ -73,7 +77,7 @@ export default function Transactions() {
         ))}
       </View>
 
-      <FlatList
+      <FlatList extraData={fmt} 
         data={filtered}
         keyExtractor={(t) => t.id}
         contentContainerStyle={styles.listContent}
@@ -126,6 +130,7 @@ export default function Transactions() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
+  eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
   title: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text1 },
   subtitle: { fontSize: FontSize.base, color: Colors.text2, marginTop: 2 },
   noAccountNotice: {

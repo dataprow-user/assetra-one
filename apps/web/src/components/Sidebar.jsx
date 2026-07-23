@@ -19,11 +19,13 @@ const navItems = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab }) {
+export default function Sidebar({ activeTab, setActiveTab, mobileOpen = false, onCloseMobile }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <>
+      {mobileOpen && <div className="sidebar-backdrop" onClick={onCloseMobile} />}
+      <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
       <button
         className="sidebar-brand"
         onClick={() => setCollapsed(c => !c)}
@@ -31,7 +33,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       >
         <span className="sidebar-brand-main">
           <span className="brand-logo"><BrandMark size={20} /></span>
-          {!collapsed && <span className="brand-name">Assetra One</span>}
+          <span className="brand-name">Assetra One</span>
         </span>
         <span className="sidebar-collapse-arrow">
           {collapsed ? <ChevronRight size={16}/> : <ChevronLeft size={16}/>}
@@ -47,10 +49,11 @@ export default function Sidebar({ activeTab, setActiveTab }) {
             title={collapsed ? label : undefined}
           >
             <Icon size={20} />
-            {!collapsed && <span>{label}</span>}
+            <span className="nav-item-label">{label}</span>
           </button>
         ))}
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 }

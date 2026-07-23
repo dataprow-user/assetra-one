@@ -8,6 +8,14 @@
 .filter-tab:hover { color: var(--text-1); background: var(--panel-hover); }
 .filter-tab.active { color: var(--accent-light); background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); }
 
+/* ── Mobile: filter bar stacks, tabs become an equal-width segmented row ── */
+@media (max-width: 640px) {
+  /* Override the inline maxWidth on the search box + group select */
+  .txn-filters > .input { max-width: none !important; width: 100%; }
+  .txn-filters .filter-tabs { width: 100%; }
+  .txn-filters .filter-tab { flex: 1; text-align: center; }
+}
+
 /* ── Toast ─────────────────────────────────────────────────────────── */
 .txn-toast {
   position: fixed; bottom: 28px; right: 28px; z-index: 9999;

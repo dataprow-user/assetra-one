@@ -245,10 +245,16 @@ function AppShell() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pendingSearch, setPendingSearch] = useState('');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    if (currentUser && !localStorage.getItem(ONBOARDING_KEY)) {
-      setShowOnboarding(true);
+    if (currentUser) {
+      // Always land on the Dashboard after signing in — don't resume the last
+      // tab from a previous session (AppShell stays mounted across sign-out).
+      setActiveTab('dashboard');
+      if (!localStorage.getItem(ONBOARDING_KEY)) {
+        setShowOnboarding(true);
+      }
     }
   }, [currentUser]);
 
@@ -298,9 +304,14 @@ function AppShell() {
       <CloudSyncManager state={state} dispatch={dispatch} />
       <BackupBanner state={state} />
       <div className="app-shell-body">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => { setActiveTab(tab); setMobileNavOpen(false); }}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
+        />
         <div className="app-main">
-          <Header activeTab={activeTab} />
+          <Header activeTab={activeTab} onMenuClick={() => setMobileNavOpen(o => !o)} />
           <main className="app-content">
             <PageComponent key={activeTab} initialSearch={activeTab === 'transactions' ? pendingSearch : undefined} />
           </main>

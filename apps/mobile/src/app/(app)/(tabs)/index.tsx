@@ -1,15 +1,33 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TrendingUp, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { TrendingUp, Wallet, ArrowDownRight, ArrowUpRight, Eye, EyeOff, Settings as SettingsIcon, LogOut, Search } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
-import { Card, StatCard, ProgressBar, EmptyState } from '../../../components/ui';
-import { Colors, FontSize, Spacing, GroupColors } from '../../../constants/theme';
-import { fmt, fmtSigned } from '../../../utils/format';
+import { Card, StatCard, ProgressBar, EmptyState, DriveConnectBanner } from '../../../components/ui';
+import SearchModal from '../../../components/SearchModal';
+import { Colors, FontSize, Spacing, GroupColors, Radius } from '../../../constants/theme';
 import { PieChart as PieChartIcon } from 'lucide-react-native';
 
 export default function Dashboard() {
-  const { state } = useApp();
+  const { state, toggleAmounts, amountsHidden, logout, currentUser, fmt, fmtSigned, fmtN } = useApp();
+  const router = useRouter();
+  const confirmLogout = () => Alert.alert('Sign out?', 'You can sign back in with Google anytime.', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
+  ]);
+  const [showSearch, setShowSearch] = useState(false);
+  const firstName = currentUser?.name?.split(' ')[0];
+  const initials = (currentUser?.name || 'U').slice(0, 2).toUpperCase();
+
+  // First-time hint pointing at the eye toggle while amounts are masked;
+  // clears on reveal or after a few seconds. Mirrors the web eye-hint.
+  const [showHint, setShowHint] = useState(true);
+  useEffect(() => {
+    if (!amountsHidden) { setShowHint(false); return; }
+    const t = setTimeout(() => setShowHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [amountsHidden]);
   const { transactions = [], accounts = [], assets = [], liabilities = [], budgets = [], insurance = [] } = state;
 
   const totalAssets = assets.reduce((s: number, a: any) => s + (a.quantity * a.currentPrice), 0);
@@ -19,11 +37,23 @@ export default function Dashboard() {
     .filter((a: any) => ['bank', 'cash', 'wallet'].includes(a.type))
     .reduce((s: number, a: any) => s + Number(a.balance || 0), 0);
 
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const thisMonthTxns = transactions.filter((t: any) => new Date(t.date) >= monthStart);
   const monthIncome = thisMonthTxns.filter((t: any) => t.type === 'income').reduce((s: number, t: any) => s + t.amount, 0);
   const monthExpense = thisMonthTxns.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + t.amount, 0);
+
+  // Budgets set for the current month — drives both the "Budgeted vs Spent"
+  // summary and the per-category list below. `spent` isn't stored on the
+  // budget itself; it's derived by matching this month's expense
+  // transactions to the budget's category/sub-category, same as web.
+  const thisMonthBudgets = budgets.filter((b: any) => b.month === MONTH_NAMES[now.getMonth()] && String(b.year) === String(now.getFullYear()));
+  const monthBudgeted = thisMonthBudgets.reduce((s: number, b: any) => s + Number(b.plannedAmount || 0), 0);
+  const getBudgetSpent = (b: any) => thisMonthTxns
+    .filter((t: any) => t.type === 'expense' && t.category === b.category && (!b.subcategory || t.subcategory === b.subcategory))
+    .reduce((s: number, t: any) => s + t.amount, 0);
+  const budgetUsagePct = monthBudgeted > 0 ? Math.min((monthExpense / monthBudgeted) * 100, 100) : 0;
 
   const recentTxns = [...transactions].sort((a: any, b: any) => +new Date(b.date) - +new Date(a.date)).slice(0, 6);
 
@@ -37,12 +67,36 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <DriveConnectBanner />
         <View style={styles.header}>
-          <Text style={styles.greeting}>Good {greeting} 👋</Text>
-          <Text style={styles.subGreeting}>
-            {state.household?.name} • {now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </Text>
+          <View style={styles.headerText}>
+            <Text style={styles.greeting}>Good {greeting}{firstName ? `, ${firstName}` : ''} 👋</Text>
+            <Text style={styles.subGreeting}>
+              {state.household?.name} • {now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            <Pressable onPress={() => setShowSearch(true)} hitSlop={10} style={styles.eyeBtn}>
+              <Search size={20} color={Colors.text2} />
+            </Pressable>
+            <Pressable onPress={toggleAmounts} hitSlop={10} style={styles.eyeBtn}>
+              {amountsHidden ? <EyeOff size={20} color={Colors.text2} /> : <Eye size={20} color={Colors.accentLight} />}
+            </Pressable>
+            <Pressable onPress={() => router.push('/(app)/settings')} hitSlop={10} style={styles.eyeBtn}>
+              <SettingsIcon size={20} color={Colors.text2} />
+            </Pressable>
+            <Pressable onPress={confirmLogout} hitSlop={10} style={styles.eyeBtn}>
+              <LogOut size={20} color={Colors.red} />
+            </Pressable>
+          </View>
         </View>
+
+        {showHint && amountsHidden ? (
+          <Pressable onPress={() => setShowHint(false)} style={styles.hint}>
+            <EyeOff size={13} color={Colors.accentLight} />
+            <Text style={styles.hintText}>Amounts are hidden — tap the eye to show them.</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.statsGrid}>
           <StatCard title="Net Worth" value={fmtSigned(netWorth)} sub={netWorth >= 0 ? 'Positive net worth' : 'Negative net worth'} subColor={netWorth >= 0 ? Colors.green : Colors.red} icon={TrendingUp} iconColor={Colors.accentLight} />
@@ -71,29 +125,46 @@ export default function Dashboard() {
           </Card>
         )}
 
-        <Text style={styles.sectionTitle}>Budget Status</Text>
-        {budgets.length === 0 ? (
-          <EmptyState icon={PieChartIcon} title="No budgets set" />
+        <Text style={styles.sectionTitle}>This Month's Budget</Text>
+        {thisMonthBudgets.length === 0 ? (
+          <EmptyState icon={PieChartIcon} title="No budgets set for this month" />
         ) : (
-          <Card style={{ gap: Spacing.md }}>
-            {budgets.map((b: any) => {
-              const pct = Math.min((b.spent / b.amount) * 100, 100);
-              const color = pct >= 100 ? Colors.red : pct >= b.alertPct ? Colors.yellow : Colors.green;
-              return (
-                <View key={b.id}>
-                  <View style={styles.budgetTop}>
-                    <Text style={styles.budgetName}>{b.name}</Text>
-                    <Text style={[styles.budgetPct, { color }]}>{pct.toFixed(0)}%</Text>
+          <>
+            <Card style={{ gap: Spacing.sm, marginBottom: Spacing.sm }}>
+              <View style={styles.budgetTop}>
+                <Text style={styles.budgetSummaryLabel}>Budgeted vs Spent</Text>
+                <Text style={[styles.budgetPct, { color: budgetUsagePct >= 100 ? Colors.red : budgetUsagePct >= 80 ? Colors.yellow : Colors.green }]}>
+                  {budgetUsagePct.toFixed(0)}%
+                </Text>
+              </View>
+              <ProgressBar pct={budgetUsagePct} color={budgetUsagePct >= 100 ? Colors.red : budgetUsagePct >= 80 ? Colors.yellow : Colors.green} />
+              <View style={styles.budgetNums}>
+                <Text style={styles.budgetNumText}>{fmt(monthExpense)} spent</Text>
+                <Text style={styles.budgetNumText}>{fmt(monthBudgeted)} budgeted</Text>
+              </View>
+            </Card>
+
+            <Card style={{ gap: Spacing.md }}>
+              {thisMonthBudgets.map((b: any) => {
+                const spent = getBudgetSpent(b);
+                const pct = b.plannedAmount > 0 ? Math.min((spent / b.plannedAmount) * 100, 100) : 0;
+                const color = pct >= 100 ? Colors.red : pct >= 80 ? Colors.yellow : Colors.green;
+                return (
+                  <View key={b.id}>
+                    <View style={styles.budgetTop}>
+                      <Text style={styles.budgetName}>{b.category}{b.subcategory ? ` · ${b.subcategory}` : ''}</Text>
+                      <Text style={[styles.budgetPct, { color }]}>{pct.toFixed(0)}%</Text>
+                    </View>
+                    <ProgressBar pct={pct} color={color} />
+                    <View style={styles.budgetNums}>
+                      <Text style={styles.budgetNumText}>{fmt(spent)} spent</Text>
+                      <Text style={styles.budgetNumText}>{fmt(b.plannedAmount)} limit</Text>
+                    </View>
                   </View>
-                  <ProgressBar pct={pct} color={color} />
-                  <View style={styles.budgetNums}>
-                    <Text style={styles.budgetNumText}>{fmt(b.spent)} spent</Text>
-                    <Text style={styles.budgetNumText}>{fmt(b.amount)} limit</Text>
-                  </View>
-                </View>
-              );
-            })}
-          </Card>
+                );
+              })}
+            </Card>
+          </>
         )}
 
         <Text style={styles.sectionTitle}>Upcoming Due</Text>
@@ -135,6 +206,7 @@ export default function Dashboard() {
           </Text>
         </Card>
       </ScrollView>
+      <SearchModal visible={showSearch} onClose={() => setShowSearch(false)} />
     </SafeAreaView>
   );
 }
@@ -142,7 +214,16 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   content: { padding: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
-  header: { marginBottom: Spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, marginBottom: Spacing.md },
+  headerText: { flex: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
+  hint: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.sm,
+    backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)',
+    borderRadius: Radius.sm, paddingVertical: 8, paddingHorizontal: 12,
+  },
+  hintText: { color: Colors.accentLight, fontSize: FontSize.sm, flex: 1 },
   greeting: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text1 },
   subGreeting: { fontSize: FontSize.base, color: Colors.text2, marginTop: 2 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
@@ -155,6 +236,7 @@ const styles = StyleSheet.create({
   txnMeta: { color: Colors.text2, fontSize: FontSize.sm, marginTop: 2 },
   budgetTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   budgetName: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base },
+  budgetSummaryLabel: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },
   budgetPct: { fontWeight: '700', fontSize: FontSize.base },
   budgetNums: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
   budgetNumText: { fontSize: FontSize.sm, color: Colors.text2 },

@@ -4,15 +4,8 @@ import {
   ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown,
   Wallet, AlertTriangle, Clock, IndianRupee
 } from 'lucide-react';
+import { fmt, fmtSigned } from '../utils/format';
 import './Dashboard.css';
-
-const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
-// Preserves the sign — fmt() alone hides negatives behind Math.abs(), which
-// made an overdrawn/negative balance render identically to a positive one.
-const fmtSigned = (n) => {
-  const num = Number(n) || 0;
-  return (num < 0 ? '-' : '') + fmt(num);
-};
 
 function StatCard({ title, value, sub, subColor, icon: Icon, iconColor }) {
   return (

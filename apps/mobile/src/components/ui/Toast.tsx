@@ -19,11 +19,11 @@ export default function Toast({ toast }: { toast: { type: ToastType; msg: string
     <Animated.View
       style={[
         styles.wrap,
-        { opacity, backgroundColor: isSuccess ? 'rgba(16,185,129,0.18)' : 'rgba(244,63,94,0.18)', borderColor: isSuccess ? 'rgba(16,185,129,0.35)' : 'rgba(244,63,94,0.35)' },
+        { opacity, backgroundColor: isSuccess ? Colors.green : Colors.red, borderColor: 'rgba(255,255,255,0.25)' },
       ]}
     >
-      {isSuccess ? <CheckCircle2 size={16} color={Colors.green} /> : <AlertTriangle size={16} color={Colors.red} />}
-      <Text style={[styles.text, { color: isSuccess ? Colors.green : Colors.red }]}>{toast.msg}</Text>
+      {isSuccess ? <CheckCircle2 size={18} color="#fff" /> : <AlertTriangle size={18} color="#fff" />}
+      <Text style={[styles.text, { color: '#fff' }]}>{toast.msg}</Text>
     </Animated.View>
   );
 }

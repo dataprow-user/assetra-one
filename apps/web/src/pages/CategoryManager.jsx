@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/Modal';
-import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit2, Tag, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { DEFAULT_GROUPS } from '../data/categories';
 import { MAX_NAME_LENGTH } from '../utils/validation';
 import './CategoryManager.css';
@@ -18,8 +18,10 @@ export default function CategoryManager() {
     // modal types: 'add-cat' | 'edit-cat' | 'add-sub'
   const [catForm, setCatForm] = useState({ name: '', group: 'Needs' });
   const [groupForm, setGroupForm] = useState({ name: '' });
-  const [subForm, setSubForm] = useState('');
   const [newSubInput, setNewSubInput] = useState({}); // { catId: string }
+  const [subError, setSubError] = useState({});       // { catId: errorMessage }
+  const [editingSub, setEditingSub] = useState(null); // { catId, value } — sub being renamed
+  const [editSubVal, setEditSubVal] = useState('');
 
   const categories = tab === 'expense' ? expenseCategories : incomeCategories;
   const ADD_TYPE   = tab === 'expense' ? 'ADD_EXPENSE_CATEGORY'    : 'ADD_INCOME_CATEGORY';
@@ -77,13 +79,43 @@ export default function CategoryManager() {
   // ── Add Subcategory inline ──
   const handleAddSub = (cat) => {
     const val = (newSubInput[cat.id] || '').trim().slice(0, MAX_NAME_LENGTH);
-    if (!val) return;
-    if (cat.subcategories.includes(val)) { alert('Subcategory already exists.'); return; }
+    if (!val) {
+      setSubError(s => ({ ...s, [cat.id]: 'Please enter a sub-category name.' }));
+      return;
+    }
+    if (cat.subcategories.includes(val)) {
+      setSubError(s => ({ ...s, [cat.id]: 'That sub-category already exists.' }));
+      return;
+    }
     dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: [...cat.subcategories, val] } });
     setNewSubInput(s => ({ ...s, [cat.id]: '' }));
+    setSubError(s => ({ ...s, [cat.id]: '' }));
+  };
+
+  const startEditSub = (cat, sub) => {
+    setEditingSub({ catId: cat.id, value: sub });
+    setEditSubVal(sub);
+    setSubError(s => ({ ...s, [cat.id]: '' }));
+  };
+
+  const handleUpdateSub = (cat, oldSub) => {
+    const val = editSubVal.trim().slice(0, MAX_NAME_LENGTH);
+    if (!val) {
+      setSubError(s => ({ ...s, [cat.id]: 'Sub-category name cannot be empty.' }));
+      return;
+    }
+    if (val === oldSub) { setEditingSub(null); return; }
+    if (cat.subcategories.includes(val)) {
+      setSubError(s => ({ ...s, [cat.id]: 'That sub-category already exists.' }));
+      return;
+    }
+    dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: cat.subcategories.map(s => s === oldSub ? val : s) } });
+    setEditingSub(null);
+    setSubError(s => ({ ...s, [cat.id]: '' }));
   };
 
   const handleDeleteSub = (cat, sub) => {
+    if (!window.confirm(`Remove the sub-category "${sub}"? Existing transactions will keep the old name.`)) return;
     dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: cat.subcategories.filter(s => s !== sub) } });
   };
 
@@ -159,12 +191,37 @@ export default function CategoryManager() {
                   <div className="sub-panel">
                     <div className="sub-chips">
                       {cat.subcategories.map(sub => (
-                        <div key={sub} className="sub-chip">
-                          {sub}
-                          <button className="sub-chip-del" onClick={() => handleDeleteSub(cat, sub)} title="Remove">
-                            <X size={12}/>
-                          </button>
-                        </div>
+                        editingSub && editingSub.catId === cat.id && editingSub.value === sub ? (
+                          <div key={sub} className="sub-chip sub-chip-editing">
+                            <input
+                              className="sub-edit-input"
+                              autoFocus
+                              maxLength={MAX_NAME_LENGTH}
+                              value={editSubVal}
+                              onChange={e => setEditSubVal(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  { e.preventDefault(); handleUpdateSub(cat, sub); }
+                                if (e.key === 'Escape') { setEditingSub(null); }
+                              }}
+                            />
+                            <button className="sub-chip-save" onClick={() => handleUpdateSub(cat, sub)} title="Save">
+                              <Check size={13}/>
+                            </button>
+                            <button className="sub-chip-del" onClick={() => setEditingSub(null)} title="Cancel">
+                              <X size={12}/>
+                            </button>
+                          </div>
+                        ) : (
+                          <div key={sub} className="sub-chip">
+                            {sub}
+                            <button className="sub-chip-edit" onClick={() => startEditSub(cat, sub)} title="Rename">
+                              <Edit2 size={11}/>
+                            </button>
+                            <button className="sub-chip-del" onClick={() => handleDeleteSub(cat, sub)} title="Remove">
+                              <X size={12}/>
+                            </button>
+                          </div>
+                        )
                       ))}
                       {cat.subcategories.length === 0 && (
                         <span style={{ fontSize: '0.82rem', color: 'var(--text-3)', fontStyle: 'italic' }}>No sub-categories yet</span>
@@ -173,17 +230,21 @@ export default function CategoryManager() {
                     {/* Inline add sub */}
                     <div className="add-sub-row">
                       <input
-                        className="input add-sub-input"
+                        className={`input add-sub-input ${subError[cat.id] ? 'input-invalid' : ''}`}
                         maxLength={MAX_NAME_LENGTH}
                         placeholder="New sub-category name..."
                         value={newSubInput[cat.id] || ''}
-                        onChange={e => setNewSubInput(s => ({ ...s, [cat.id]: e.target.value }))}
+                        onChange={e => {
+                          setNewSubInput(s => ({ ...s, [cat.id]: e.target.value }));
+                          if (subError[cat.id]) setSubError(s => ({ ...s, [cat.id]: '' }));
+                        }}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSub(cat); } }}
                       />
                       <button className="btn btn-ghost btn-sm" onClick={() => handleAddSub(cat)}>
                         <Plus size={14}/> Add
                       </button>
                     </div>
+                    {subError[cat.id] && <span className="field-error">{subError[cat.id]}</span>}
                   </div>
                 )}
               </div>

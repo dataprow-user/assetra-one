@@ -6,7 +6,6 @@ import { useApp, DEFAULT_LIABILITY_TYPES } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge, ProgressBar, DateField } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
-import { fmt } from '../../utils/format';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, MAX_RATE, MAX_TENURE_MONTHS, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Liabilities.jsx — same fields/calculations,
@@ -26,7 +25,7 @@ const NUMERIC_RULES = {
 };
 
 export default function Liabilities() {
-  const { state, dispatch, uid } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { liabilities = [] } = state;
   const libTypes = state.liabilityTypes && state.liabilityTypes.length > 0 ? state.liabilityTypes : DEFAULT_LIABILITY_TYPES;
 
@@ -160,7 +159,7 @@ export default function Liabilities() {
         />
       </View>
 
-      <FlatList
+      <FlatList extraData={fmt} 
         data={liabilities}
         keyExtractor={(l: any) => l.id}
         contentContainerStyle={styles.listContent}
@@ -210,7 +209,17 @@ export default function Liabilities() {
 
       {/* Add/Edit Liability Modal */}
       {modal && (
-        <AppModal visible title={modal.mode === 'add' ? 'Add Liability' : 'Edit Liability'} onClose={() => setModal(null)}>
+        <AppModal
+          visible
+          title={modal.mode === 'add' ? 'Add Liability' : 'Edit Liability'}
+          onClose={() => setModal(null)}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
+              <Button title={modal.mode === 'add' ? 'Add Liability' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Loan Name" value={form.name} onChangeText={(v) => setForm((f: any) => ({ ...f, name: v }))}
             maxLength={MAX_NAME_LENGTH} placeholder="e.g. SBI Home Loan" />
           <SelectField label="Type" value={form.type} onChange={(v) => setForm((f: any) => ({ ...f, type: v }))}
@@ -226,11 +235,6 @@ export default function Liabilities() {
           <DateField label="Start Date" value={form.startDate} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} />
           <FormField label="Outstanding Balance (₹)" keyboardType="decimal-pad" value={form.outstanding}
             onChangeText={setOutstanding} error={errors.outstanding} placeholder="0" />
-
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-            <Button title={modal.mode === 'add' ? 'Add Liability' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-          </View>
         </AppModal>
       )}
 
@@ -254,7 +258,17 @@ export default function Liabilities() {
 
       {/* Add/Edit Type Modal */}
       {typeModal && typeModal !== 'manage' && (
-        <AppModal visible title={typeModal.mode === 'add' ? 'Add Liability Type' : 'Edit Type'} onClose={() => setTypeModal('manage')}>
+        <AppModal
+          visible
+          title={typeModal.mode === 'add' ? 'Add Liability Type' : 'Edit Type'}
+          onClose={() => setTypeModal('manage')}
+          footer={
+            <View style={styles.actions}>
+              <Button title="Cancel" variant="ghost" onPress={() => setTypeModal('manage')} style={{ flex: 1 }} />
+              <Button title={typeModal.mode === 'add' ? 'Add' : 'Update'} onPress={handleTypeSubmit} style={{ flex: 1 }} />
+            </View>
+          }
+        >
           <FormField label="Type Name" value={typeForm.label} onChangeText={(v) => setTypeForm((f: any) => ({ ...f, label: v }))}
             maxLength={MAX_SHORT_LENGTH} placeholder="e.g. Business Loan" />
           <Text style={styles.label}>Color</Text>
@@ -263,10 +277,6 @@ export default function Liabilities() {
               <Pressable key={c} onPress={() => setTypeForm((f: any) => ({ ...f, color: c }))}
                 style={[styles.swatch, { backgroundColor: c }, typeForm.color === c && styles.swatchActive]} />
             ))}
-          </View>
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={() => setTypeModal('manage')} style={{ flex: 1 }} />
-            <Button title={typeModal.mode === 'add' ? 'Add' : 'Update'} onPress={handleTypeSubmit} style={{ flex: 1 }} />
           </View>
         </AppModal>
       )}

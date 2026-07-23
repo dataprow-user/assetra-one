@@ -5,9 +5,8 @@ import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, CreditCard, Settings2 } from 'lucide-react';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, MAX_RATE, MAX_TENURE_MONTHS, blockInvalidNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmt } from '../utils/format';
 import './Liabilities.css';
-
-const fmt = (n) => '₹' + Math.abs(Number(n||0)).toLocaleString('en-IN');
 
 const emptyForm = () => ({ name:'', type:'home_loan', principal:'', interestRate:'', tenureMonths:'', emi:'', startDate:'', outstanding:'' });
 const emptyType = () => ({ label:'', color:'#f43f5e' });

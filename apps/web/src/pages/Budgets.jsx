@@ -5,9 +5,9 @@ import { Plus, Edit2, Trash2, PieChart, ChevronLeft, ChevronRight, Table2, Layou
 import { DEFAULT_GROUPS } from '../data/categories';
 import { MAX_NOTES_LENGTH, MAX_AMOUNT, blockInvalidNumberKeys } from '../utils/validation';
 import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fmt } from '../utils/format';
 import './Budgets.css';
 
-const fmt = (n) => '₹' + Math.abs(Number(n || 0)).toLocaleString('en-IN');
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
 

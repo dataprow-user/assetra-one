@@ -1,13 +1,9 @@
 // Expo's documented monorepo config (https://docs.expo.dev/guides/monorepos/).
 //
-// Without this, a transitive dependency like @react-navigation/native (pulled
-// in by expo-router) can get hoisted to the workspace root's node_modules,
-// where its own `require('react')` resolves to the ROOT copy of React
-// instead of this app's local one. Two different React module instances in
-// the same render tree breaks hooks outright (e.g. "Cannot read properties
-// of null (reading 'useEffect')"). Forcing this app's own node_modules first
-// — and disabling Metro's normal upward directory walk — makes every module
-// resolve to the same single React instance, regardless of where it lives.
+// getDefaultConfig already resolves this app's dependencies correctly now that
+// the workspace has a single, de-duplicated copy of every package hoisted to
+// the root node_modules. We only add the workspace root to watchFolders so
+// Metro picks up changes to shared code outside this app's directory.
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
@@ -16,11 +12,6 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [workspaceRoot];
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-  path.resolve(workspaceRoot, 'node_modules'),
-];
-config.resolver.disableHierarchicalLookup = true;
+config.watchFolders = [...new Set([...(config.watchFolders ?? []), workspaceRoot])];
 
 module.exports = config;

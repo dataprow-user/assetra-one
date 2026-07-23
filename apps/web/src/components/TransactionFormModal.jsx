@@ -3,14 +3,7 @@ import { useApp } from '../context/AppContext';
 import Modal from './Modal';
 import { Wallet } from 'lucide-react';
 import { MAX_NOTES_LENGTH } from '../utils/validation';
-
-const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
-// Preserves the sign — fmt() alone hides negatives behind Math.abs(), which
-// made an overdrawn/credit-card account look identical to a positive balance.
-const fmtSigned = (n) => {
-  const num = Number(n) || 0;
-  return (num < 0 ? '-' : '') + fmt(num);
-};
+import { fmt, fmtSigned } from '../utils/format';
 
 const MAX_TRANSACTION_AMOUNT = 9999999999; // 9.99B ceiling — guards against fat-fingered digits
 
@@ -49,6 +42,10 @@ export default function TransactionFormModal({ mode, transaction, onClose, onErr
     mode === 'edit' && transaction ? { ...transaction, eventId: transaction.eventId || '' } : emptyForm()
   );
   const [amountError, setAmountError] = useState('');
+  const [dateError, setDateError] = useState('');
+
+  // Transactions record something that already happened — no future dates.
+  const today = new Date().toISOString().split('T')[0];
 
   const activeCats    = form.type === 'income' ? incomeCategories : expenseCategories;
   const selectedCat    = activeCats.find(c => c.name === form.category);
@@ -58,6 +55,7 @@ export default function TransactionFormModal({ mode, transaction, onClose, onErr
   const set = k => e => {
     const val = e.target.value;
     if (k === 'amount') setAmountError(validateAmount(val));
+    if (k === 'date')   setDateError(val && val > today ? 'Date cannot be in the future.' : '');
     setForm(f => {
       const u = { ...f, [k]: val };
       if (k === 'type')     { u.group = ''; u.category = ''; u.subcategory = ''; }
@@ -77,6 +75,9 @@ export default function TransactionFormModal({ mode, transaction, onClose, onErr
 
     const amtErr = validateAmount(form.amount);
     if (amtErr) { setAmountError(amtErr); return; }
+
+    if (!form.date) { setDateError('Date is required.'); return; }
+    if (form.date > today) { setDateError('Date cannot be in the future.'); return; }
 
     if (!form.account) {
       onError('Please select an account for this transaction.');
@@ -108,7 +109,16 @@ export default function TransactionFormModal({ mode, transaction, onClose, onErr
           </div>
           <div className="form-group">
             <label>Date</label>
-            <input className="input" type="date" required value={form.date} onChange={set('date')} />
+            <input
+              className={`input ${dateError ? 'input-invalid' : ''}`}
+              type="date"
+              required
+              max={today}
+              value={form.date}
+              onChange={set('date')}
+              aria-invalid={!!dateError}
+            />
+            {dateError && <span className="field-error">{dateError}</span>}
           </div>
         </div>
 

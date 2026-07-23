@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import TransactionFormModal from '../components/TransactionFormModal';
 import { Edit2, Trash2, Wallet, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { fmt } from '../utils/format';
 import './Transactions.css';
-
-const fmt = (n) => '₹' + Math.abs(Number(n)).toLocaleString('en-IN');
 
 function goToAccounts() {
   window.dispatchEvent(new CustomEvent('a1:navigate', { detail: 'accounts' }));
