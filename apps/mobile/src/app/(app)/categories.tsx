@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers } from 'lucide-react-native';
+import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers, Check } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, ScreenHeader } from '../../components/ui';
 import { Colors, FontSize, Spacing, Radius, GroupColors } from '../../constants/theme';
@@ -25,6 +25,9 @@ export default function CategoryManager() {
   const [catForm, setCatForm] = useState<any>({ name: '', group: 'Needs' });
   const [groupForm, setGroupForm] = useState<any>({ name: '' });
   const [newSubInput, setNewSubInput] = useState<Record<string, string>>({});
+  const [editingSub, setEditingSub] = useState<{ catId: string; value: string } | null>(null);
+  const [editSubVal, setEditSubVal] = useState('');
+  const [subError, setSubError] = useState<Record<string, string>>({});
 
   const categories = tab === 'income' ? incomeCategories : expenseCategories;
   const ADD_TYPE = tab === 'expense' ? 'ADD_EXPENSE_CATEGORY' : 'ADD_INCOME_CATEGORY';
@@ -68,13 +71,37 @@ export default function CategoryManager() {
   // ── Add / remove subcategory inline ──
   const handleAddSub = (cat: any) => {
     const val = (newSubInput[cat.id] || '').trim().slice(0, MAX_NAME_LENGTH);
-    if (!val) return;
-    if (cat.subcategories.includes(val)) { Alert.alert('Duplicate', 'Subcategory already exists.'); return; }
+    if (!val) { setSubError((s) => ({ ...s, [cat.id]: 'Please enter a sub-category name.' })); return; }
+    if (cat.subcategories.includes(val)) { setSubError((s) => ({ ...s, [cat.id]: 'That sub-category already exists.' })); return; }
     dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: [...cat.subcategories, val] } });
     setNewSubInput((s) => ({ ...s, [cat.id]: '' }));
+    setSubError((s) => ({ ...s, [cat.id]: '' }));
   };
   const handleDeleteSub = (cat: any, sub: string) => {
-    dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: cat.subcategories.filter((s: string) => s !== sub) } });
+    Alert.alert('Remove sub-category?', `Remove "${sub}"? Existing transactions will keep the old name.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: cat.subcategories.filter((s: string) => s !== sub) } }),
+      },
+    ]);
+  };
+
+  const startEditSub = (cat: any, sub: string) => {
+    setEditingSub({ catId: cat.id, value: sub });
+    setEditSubVal(sub);
+    setSubError((s) => ({ ...s, [cat.id]: '' }));
+  };
+
+  const handleUpdateSub = (cat: any, oldSub: string) => {
+    const val = editSubVal.trim().slice(0, MAX_NAME_LENGTH);
+    if (!val) { setSubError((s) => ({ ...s, [cat.id]: 'Sub-category name cannot be empty.' })); return; }
+    if (val === oldSub) { setEditingSub(null); return; }
+    if (cat.subcategories.includes(val)) { setSubError((s) => ({ ...s, [cat.id]: 'That sub-category already exists.' })); return; }
+    dispatch({ type: UPD_TYPE, payload: { ...cat, subcategories: cat.subcategories.map((s: string) => (s === oldSub ? val : s)) } });
+    setEditingSub(null);
+    setSubError((s) => ({ ...s, [cat.id]: '' }));
   };
 
   // Only compute byGroup when not on the groups tab.
@@ -150,18 +177,45 @@ export default function CategoryManager() {
                 {expanded[cat.id] && (
                   <View style={styles.subPanel}>
                     <View style={styles.subChips}>
-                      {cat.subcategories.map((sub: string) => (
-                        <View key={sub} style={styles.subChip}>
-                          <Text style={styles.subChipText}>{sub}</Text>
-                          <Pressable onPress={() => handleDeleteSub(cat, sub)} hitSlop={8}>
-                            <X size={12} color={Colors.text2} />
-                          </Pressable>
-                        </View>
-                      ))}
+                      {cat.subcategories.map((sub: string) => {
+                        const isEditing = editingSub?.catId === cat.id && editingSub?.value === sub;
+                        if (isEditing) {
+                          return (
+                            <View key={sub} style={[styles.subChip, styles.subChipEditing]}>
+                              <TextInput
+                                style={styles.subEditInput}
+                                value={editSubVal}
+                                onChangeText={setEditSubVal}
+                                maxLength={MAX_NAME_LENGTH}
+                                autoFocus
+                                onSubmitEditing={() => handleUpdateSub(cat, sub)}
+                              />
+                              <Pressable onPress={() => handleUpdateSub(cat, sub)} hitSlop={8}>
+                                <Check size={14} color={Colors.green} />
+                              </Pressable>
+                              <Pressable onPress={() => setEditingSub(null)} hitSlop={8}>
+                                <X size={14} color={Colors.text2} />
+                              </Pressable>
+                            </View>
+                          );
+                        }
+                        return (
+                          <View key={sub} style={styles.subChip}>
+                            <Text style={styles.subChipText}>{sub}</Text>
+                            <Pressable onPress={() => startEditSub(cat, sub)} hitSlop={8}>
+                              <Edit2 size={12} color={Colors.accentLight} />
+                            </Pressable>
+                            <Pressable onPress={() => handleDeleteSub(cat, sub)} hitSlop={8}>
+                              <X size={12} color={Colors.red} />
+                            </Pressable>
+                          </View>
+                        );
+                      })}
                       {cat.subcategories.length === 0 && (
                         <Text style={styles.emptySubText}>No sub-categories yet</Text>
                       )}
                     </View>
+                    {subError[cat.id] ? <Text style={styles.fieldError}>{subError[cat.id]}</Text> : null}
                     <View style={styles.addSubRow}>
                       <TextInput
                         style={styles.addSubInput}
@@ -169,7 +223,7 @@ export default function CategoryManager() {
                         placeholderTextColor={Colors.text3}
                         maxLength={MAX_NAME_LENGTH}
                         value={newSubInput[cat.id] || ''}
-                        onChangeText={(v) => setNewSubInput((s) => ({ ...s, [cat.id]: v }))}
+                        onChangeText={(v) => { setNewSubInput((s) => ({ ...s, [cat.id]: v })); setSubError((s) => ({ ...s, [cat.id]: '' })); }}
                         onSubmitEditing={() => handleAddSub(cat)}
                       />
                       <Pressable style={styles.addSubBtn} onPress={() => handleAddSub(cat)}>
@@ -276,9 +330,15 @@ const styles = StyleSheet.create({
   subChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   subChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 10,
-    borderRadius: Radius.pill, backgroundColor: Colors.panelHover, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: Radius.pill, backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.25)',
   },
-  subChipText: { color: Colors.text1, fontSize: FontSize.sm },
+  subChipText: { color: Colors.accentLight, fontSize: FontSize.sm, fontWeight: '500' },
+  subChipEditing: { backgroundColor: Colors.panel, borderColor: Colors.borderStrong, paddingVertical: 4 },
+  subEditInput: {
+    minWidth: 80, paddingVertical: 2, paddingHorizontal: 6, borderRadius: Radius.sm, fontSize: FontSize.sm,
+    borderWidth: 1, borderColor: Colors.accentLight, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1,
+  },
+  fieldError: { color: Colors.red, fontSize: FontSize.sm },
   emptySubText: { fontSize: FontSize.sm, color: Colors.text3, fontStyle: 'italic' },
   addSubRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   addSubInput: {
