@@ -16,6 +16,7 @@ import { exportJSON, exportCSV, exportExcel, exportReport, pickBackupJson } from
 import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
 import PinSetupModal from '../../components/PinSetupModal';
 import { hasPin as checkHasPin, clearPin } from '../../utils/appLock';
+import { saveSafetySnapshot, getSafetySnapshotMeta, loadSafetySnapshot } from '../../utils/safetySnapshot';
 
 const REPORT_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -38,6 +39,32 @@ export default function Settings() {
   const { state, dispatch, currentUser, logout, uid, importData, setForceOnboarding } = useApp();
   const { toast, showToast } = useToast();
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // ── Safety snapshot (auto-saved before Reset / Load Sample) ────────────────
+  const [snapshotMeta, setSnapshotMeta] = useState<{ reason: 'reset' | 'sample'; savedAt: number } | null>(null);
+  const refreshSnapshotMeta = () => getSafetySnapshotMeta().then(setSnapshotMeta);
+  useEffect(() => { refreshSnapshotMeta(); }, []);
+
+  const handleRestoreSnapshot = () => {
+    if (!snapshotMeta) return;
+    const when = new Date(snapshotMeta.savedAt).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    Alert.alert(
+      'Restore previous data?',
+      `This restores the data you had right before your last ${snapshotMeta.reason === 'reset' ? 'Reset' : 'Load Sample'} (saved ${when}), replacing whatever is currently in the app.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          onPress: async () => {
+            const snap = await loadSafetySnapshot();
+            if (!snap) { showToast('error', 'No snapshot found.'); return; }
+            importData(snap);
+            showToast('success', 'Previous data restored.');
+          },
+        },
+      ],
+    );
+  };
 
   // ── Household ────────────────────────────────────────────────────────────
   const [householdName, setHouseholdName] = useState(state.household?.name || '');
@@ -233,20 +260,23 @@ export default function Settings() {
   // Resetting is destructive, so a timestamped safety snapshot is saved first
   // (to Google Drive if connected, else a local backup file), then wiped.
   const doReset = async () => {
-    let backedUp = false;
+    // A local snapshot is saved unconditionally first — a plain storage write
+    // either succeeds or throws, unlike Sharing.shareAsync below, which
+    // resolves as soon as the OS share sheet is dismissed whether or not the
+    // user actually saved the file anywhere. This is the backup we can
+    // actually promise, and it's restorable from Settings afterward.
+    await saveSafetySnapshot(state, 'reset');
     if (driveConnected) {
       const pad = (n: number) => String(n).padStart(2, '0');
       const d = new Date();
       const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-      try {
-        await uploadToDrive(JSON.stringify(state), `Assetra-Backup-${stamp}.json`);
-        backedUp = true;
-      } catch {}
+      try { await uploadToDrive(JSON.stringify(state), `Assetra-Backup-${stamp}.json`); } catch {}
     } else {
-      try { await exportJSON(state); backedUp = true; } catch {}
+      try { await exportJSON(state); } catch {}
     }
     dispatch({ type: 'RESET_ALL' });
-    showToast('success', backedUp ? 'Backup saved. Data cleared — signing out…' : 'Data cleared — signing out…');
+    refreshSnapshotMeta();
+    showToast('success', 'Data cleared — signing out… (a safety copy is restorable from Settings)');
     setTimeout(() => logout(), 1600);
   };
 
@@ -267,14 +297,16 @@ export default function Settings() {
   const handleLoadSample = () => {
     Alert.alert(
       'Load Sample Data?',
-      'This will replace all your current data with the Kumar Family demo dataset.',
+      'This will replace all your current data with the Kumar Family demo dataset. Your current data is saved automatically first and can be restored from Settings afterward.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Yes, Load Sample',
-          onPress: () => {
+          onPress: async () => {
+            await saveSafetySnapshot(state, 'sample');
             dispatch({ type: 'LOAD_SAMPLE_DATA' });
-            showToast('success', 'Sample data loaded.');
+            refreshSnapshotMeta();
+            showToast('success', 'Sample data loaded — your previous data is restorable from Settings.');
           },
         },
       ],
@@ -501,6 +533,21 @@ export default function Settings() {
             </View>
             <Button title="Load Sample" variant="secondary" size="sm" onPress={handleLoadSample} />
           </View>
+
+          {snapshotMeta && (
+            <View style={styles.dangerRow}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.dangerRowTitleRow}>
+                  <RefreshCcw size={14} color={Colors.green} />
+                  <Text style={[styles.dangerRowTitle, { color: Colors.green }]}>Restore Previous Data</Text>
+                </View>
+                <Text style={styles.dangerRowDesc}>
+                  From before your last {snapshotMeta.reason === 'reset' ? 'Reset' : 'Load Sample'} ({new Date(snapshotMeta.savedAt).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })})
+                </Text>
+              </View>
+              <Button title="Restore" variant="secondary" size="sm" onPress={handleRestoreSnapshot} />
+            </View>
+          )}
         </Card>
       </ScrollView>
 

@@ -9,7 +9,7 @@ import { getNumberError, sanitizeNumericInput, MAX_NOTES_LENGTH, MAX_AMOUNT } fr
 const emptyForm = () => ({
   date: new Date().toISOString().split('T')[0],
   type: 'expense', group: '', category: '', subcategory: '',
-  amount: '', account: '', eventId: '', notes: '',
+  amount: '', account: '', toAccount: '', eventId: '', notes: '',
 });
 
 /**
@@ -31,25 +31,31 @@ export default function TransactionFormModal({
   const { accounts = [], expenseCategories = [], incomeCategories = [], events = [] } = state;
 
   const [form, setForm] = useState(() =>
-    mode === 'edit' && transaction ? { ...transaction, eventId: transaction.eventId || '' } : emptyForm()
+    mode === 'edit' && transaction ? { toAccount: '', ...transaction, eventId: transaction.eventId || '' } : emptyForm()
   );
   const [amountError, setAmountError] = useState('');
+  const [dateError, setDateError] = useState('');
+  const today = new Date().toISOString().split('T')[0];
 
+  const isTransfer = form.type === 'transfer';
   const activeCats = form.type === 'income' ? incomeCategories : expenseCategories;
   const selectedCat = activeCats.find((c: any) => c.name === form.category);
   const subcatOptions: string[] = selectedCat?.subcategories || [];
   const selectedAcc = accounts.find((a: any) => a.id === form.account);
+  const toAccountOptions = accounts.filter((a: any) => a.id !== form.account);
 
   const set = (key: string) => (value: string) => {
     setForm((f: any) => {
       const u: any = { ...f, [key]: value };
-      if (key === 'type') { u.group = ''; u.category = ''; u.subcategory = ''; }
+      if (key === 'type') { u.group = ''; u.category = ''; u.subcategory = ''; if (value === 'transfer') u.eventId = ''; }
       if (key === 'category') {
         u.subcategory = '';
         const allCats = u.type === 'income' ? incomeCategories : expenseCategories;
         const found = allCats.find((c: any) => c.name === value);
         if (found?.group) u.group = found.group;
       }
+      if (key === 'account' && u.toAccount === value) u.toAccount = '';
+      if (key === 'date') setDateError(value && value > today ? 'Date cannot be in the future.' : '');
       return u;
     });
   };
@@ -63,10 +69,19 @@ export default function TransactionFormModal({
   const handleSubmit = () => {
     const amtErr = getNumberError(form.amount, { label: 'Amount', min: 0.01, max: MAX_AMOUNT });
     if (amtErr) { setAmountError(amtErr); return; }
-    if (!form.category) { onError('Please select a category.'); return; }
-    if (!form.account) { onError('Please select an account for this transaction.'); return; }
+    if (!form.date) { onError('Date is required.'); return; }
+    if (form.date > today) { setDateError('Date cannot be in the future.'); return; }
+    if (!form.account) { onError(isTransfer ? 'Please select a "From" account.' : 'Please select an account for this transaction.'); return; }
+    if (isTransfer) {
+      if (!form.toAccount) { onError('Please select a "To" account.'); return; }
+      if (form.toAccount === form.account) { onError('"To" account must be different from "From" account.'); return; }
+    } else if (!form.category) {
+      onError('Please select a category.'); return;
+    }
 
-    const payload = { ...form, amount: Number(form.amount) };
+    const payload: any = { ...form, amount: Number(form.amount) };
+    if (isTransfer) { payload.category = ''; payload.subcategory = ''; payload.group = ''; }
+    else payload.toAccount = '';
     if (mode === 'add') dispatch({ type: 'ADD_TRANSACTION', payload: { ...payload, id: uid() } });
     else dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...payload, id: transaction.id } });
     onClose();
@@ -91,29 +106,34 @@ export default function TransactionFormModal({
       <SelectField
         label="Type"
         value={form.type}
-        options={[{ label: 'Expense', value: 'expense' }, { label: 'Income', value: 'income' }]}
+        options={[{ label: 'Expense', value: 'expense' }, { label: 'Income', value: 'income' }, { label: 'Transfer', value: 'transfer' }]}
         onChange={set('type')}
       />
-      <DateField label="Date" value={form.date} onChange={set('date')} />
+      <DateField label="Date" value={form.date} onChange={set('date')} maximumDate={new Date()} style={dateError ? styles.dateFieldError : undefined} />
+      {dateError ? <Text style={styles.fieldError}>{dateError}</Text> : null}
 
-      <SelectField
-        label="Category"
-        value={form.category}
-        placeholder="— Select Category —"
-        options={activeCats.map((c: any) => ({ label: c.name, value: c.name }))}
-        onChange={set('category')}
-      />
-      {form.group ? <Text style={styles.groupHint}>📁 Group: <Text style={styles.groupHintStrong}>{form.group}</Text></Text> : null}
+      {!isTransfer && (
+        <>
+          <SelectField
+            label="Category"
+            value={form.category}
+            placeholder="— Select Category —"
+            options={activeCats.map((c: any) => ({ label: c.name, value: c.name }))}
+            onChange={set('category')}
+          />
+          {form.group ? <Text style={styles.groupHint}>📁 Group: <Text style={styles.groupHintStrong}>{form.group}</Text></Text> : null}
 
-      <SelectField
-        label="Sub-Category"
-        hint="(optional)"
-        value={form.subcategory}
-        placeholder="— Select Sub-Category —"
-        disabled={subcatOptions.length === 0}
-        options={subcatOptions.map((s) => ({ label: s, value: s }))}
-        onChange={set('subcategory')}
-      />
+          <SelectField
+            label="Sub-Category"
+            hint="(optional)"
+            value={form.subcategory}
+            placeholder="— Select Sub-Category —"
+            disabled={subcatOptions.length === 0}
+            options={subcatOptions.map((s) => ({ label: s, value: s }))}
+            onChange={set('subcategory')}
+          />
+        </>
+      )}
 
       <FormField
         label="Amount (₹)"
@@ -125,13 +145,13 @@ export default function TransactionFormModal({
       />
 
       <SelectField
-        label="Account"
+        label={isTransfer ? 'From Account' : 'Account'}
         value={form.account}
         placeholder="— Select Account —"
         options={accounts.map((a: any) => ({ label: `${a.name} (${fmtSigned(a.balance)})`, value: a.id }))}
         onChange={set('account')}
       />
-      {selectedAcc && liveAmt > 0 && (
+      {selectedAcc && liveAmt > 0 && !isTransfer && (
         <View style={styles.balanceHint}>
           <Wallet size={12} color={Colors.accentLight} />
           <Text style={styles.balanceHintText}>Current: <Text style={styles.balanceHintStrong}>{fmtSigned(accBal)}</Text></Text>
@@ -142,7 +162,17 @@ export default function TransactionFormModal({
         </View>
       )}
 
-      {events.length > 0 && (
+      {isTransfer && (
+        <SelectField
+          label="To Account"
+          value={form.toAccount}
+          placeholder="— Select Account —"
+          options={toAccountOptions.map((a: any) => ({ label: `${a.name} (${fmtSigned(a.balance)})`, value: a.id }))}
+          onChange={set('toAccount')}
+        />
+      )}
+
+      {!isTransfer && events.length > 0 && (
         <SelectField
           label="Link to Event"
           hint="(optional)"
@@ -167,6 +197,8 @@ export default function TransactionFormModal({
 }
 
 const styles = StyleSheet.create({
+  dateFieldError: { marginBottom: 4 },
+  fieldError: { color: Colors.red, fontSize: FontSize.sm, marginTop: -10, marginBottom: Spacing.lg },
   groupHint: { fontSize: FontSize.sm, color: Colors.text2, marginTop: -10, marginBottom: Spacing.lg },
   groupHintStrong: { color: Colors.accentLight, fontWeight: '700' },
   balanceHint: {

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { TrendingUp, Wallet, ArrowDownRight, ArrowUpRight, Eye, EyeOff, Settings as SettingsIcon, LogOut, Search } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
-import { Card, StatCard, ProgressBar, EmptyState, DriveConnectBanner } from '../../../components/ui';
+import { Card, StatCard, ProgressBar, EmptyState, DriveConnectBanner, DateField } from '../../../components/ui';
 import SearchModal from '../../../components/SearchModal';
 import { Colors, FontSize, Spacing, GroupColors, Radius } from '../../../constants/theme';
 import { PieChart as PieChartIcon } from 'lucide-react-native';
@@ -39,19 +39,48 @@ export default function Dashboard() {
 
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thisMonthTxns = transactions.filter((t: any) => new Date(t.date) >= monthStart);
+  const todayISO = now.toISOString().split('T')[0];
+  const calendarMonthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
+  // Dashboard period — defaults to the current calendar month, but a custom
+  // range lets you match a salary cycle (e.g. "25th to 24th") instead of the
+  // 1st-to-end-of-month default, so income/expense/budget figures reflect
+  // when you actually get paid rather than the calendar.
+  const [rangeMode, setRangeMode] = useState<'month' | 'custom'>('month');
+  const [customFrom, setCustomFrom] = useState(calendarMonthStartISO);
+  const [customTo, setCustomTo] = useState(todayISO);
+
+  const periodStart = rangeMode === 'custom' ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodEndRaw = rangeMode === 'custom' ? new Date(customTo) : now;
+  const periodEnd = new Date(periodEndRaw.getFullYear(), periodEndRaw.getMonth(), periodEndRaw.getDate(), 23, 59, 59, 999);
+
+  const thisMonthTxns = transactions.filter((t: any) => { const d = new Date(t.date); return d >= periodStart && d <= periodEnd; });
   const monthIncome = thisMonthTxns.filter((t: any) => t.type === 'income').reduce((s: number, t: any) => s + t.amount, 0);
   const monthExpense = thisMonthTxns.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + t.amount, 0);
 
-  // Budgets set for the current month — drives both the "Budgeted vs Spent"
-  // summary and the per-category list below. `spent` isn't stored on the
-  // budget itself; it's derived by matching this month's expense
-  // transactions to the budget's category/sub-category, same as web.
-  const thisMonthBudgets = budgets.filter((b: any) => b.month === MONTH_NAMES[now.getMonth()] && String(b.year) === String(now.getFullYear()));
+  // Budgets are keyed by calendar month/year, so a custom range is matched by
+  // including every month it touches (e.g. a 25th-Jul→24th-Aug range pulls in
+  // both July's and August's budgeted categories).
+  const periodMonths: { month: string; year: number }[] = [];
+  {
+    let d = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
+    const last = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1);
+    while (d <= last) { periodMonths.push({ month: MONTH_NAMES[d.getMonth()], year: d.getFullYear() }); d.setMonth(d.getMonth() + 1); }
+  }
+  const periodBudgetsRaw = budgets.filter((b: any) => periodMonths.some((m) => m.month === b.month && String(m.year) === String(b.year)));
+
+  // Rolled up to category level for the dashboard — a category split across
+  // several sub-category budget rows shows as one combined line here.
+  const thisMonthBudgets: any[] = Object.values(
+    periodBudgetsRaw.reduce((acc: Record<string, any>, b: any) => {
+      if (!acc[b.category]) acc[b.category] = { id: `cat-${b.category}`, category: b.category, plannedAmount: 0 };
+      acc[b.category].plannedAmount += Number(b.plannedAmount || 0);
+      return acc;
+    }, {} as Record<string, any>),
+  );
   const monthBudgeted = thisMonthBudgets.reduce((s: number, b: any) => s + Number(b.plannedAmount || 0), 0);
   const getBudgetSpent = (b: any) => thisMonthTxns
-    .filter((t: any) => t.type === 'expense' && t.category === b.category && (!b.subcategory || t.subcategory === b.subcategory))
+    .filter((t: any) => t.type === 'expense' && t.category === b.category)
     .reduce((s: number, t: any) => s + t.amount, 0);
   const budgetUsagePct = monthBudgeted > 0 ? Math.min((monthExpense / monthBudgeted) * 100, 100) : 0;
 
@@ -98,11 +127,26 @@ export default function Dashboard() {
           </Pressable>
         ) : null}
 
+        <View style={styles.periodRow}>
+          <Pressable onPress={() => setRangeMode('month')} style={[styles.periodPill, rangeMode === 'month' && styles.periodPillActive]}>
+            <Text style={[styles.periodPillText, rangeMode === 'month' && styles.periodPillTextActive]}>This Month</Text>
+          </Pressable>
+          <Pressable onPress={() => setRangeMode('custom')} style={[styles.periodPill, rangeMode === 'custom' && styles.periodPillActive]}>
+            <Text style={[styles.periodPillText, rangeMode === 'custom' && styles.periodPillTextActive]}>Custom Range</Text>
+          </Pressable>
+        </View>
+        {rangeMode === 'custom' && (
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
+            <DateField label="To" value={customTo} onChange={setCustomTo} maximumDate={new Date()} style={{ flex: 1 }} />
+          </View>
+        )}
+
         <View style={styles.statsGrid}>
           <StatCard title="Net Worth" value={fmtSigned(netWorth)} sub={netWorth >= 0 ? 'Positive net worth' : 'Negative net worth'} subColor={netWorth >= 0 ? Colors.green : Colors.red} icon={TrendingUp} iconColor={Colors.accentLight} />
           <StatCard title="In Hand" value={fmtSigned(inHand)} sub="Across all accounts" subColor={inHand >= 0 ? Colors.text2 : Colors.red} icon={Wallet} iconColor={Colors.green} />
-          <StatCard title="This Month Income" value={fmt(monthIncome)} sub="↑ Earnings" subColor={Colors.green} icon={ArrowDownRight} iconColor={Colors.green} />
-          <StatCard title="This Month Expense" value={fmt(monthExpense)} sub={`Savings: ${fmt(monthIncome - monthExpense)}`} subColor={monthIncome - monthExpense >= 0 ? Colors.green : Colors.red} icon={ArrowUpRight} iconColor={Colors.red} />
+          <StatCard title={rangeMode === 'month' ? 'This Month Income' : 'Period Income'} value={fmt(monthIncome)} sub="↑ Earnings" subColor={Colors.green} icon={ArrowDownRight} iconColor={Colors.green} />
+          <StatCard title={rangeMode === 'month' ? 'This Month Expense' : 'Period Expense'} value={fmt(monthExpense)} sub={`Savings: ${fmt(monthIncome - monthExpense)}`} subColor={monthIncome - monthExpense >= 0 ? Colors.green : Colors.red} icon={ArrowUpRight} iconColor={Colors.red} />
         </View>
 
         <Text style={styles.sectionTitle}>Recent Transactions</Text>
@@ -110,18 +154,25 @@ export default function Dashboard() {
           <EmptyState icon={ArrowUpRight} title="No transactions yet" />
         ) : (
           <Card style={{ gap: 0 }}>
-            {recentTxns.map((t: any, i: number) => (
-              <View key={t.id} style={[styles.txnRow, i < recentTxns.length - 1 && styles.txnRowBorder]}>
-                <View style={[styles.txnDot, { backgroundColor: t.type === 'income' ? Colors.green : Colors.red }]} />
-                <View style={styles.txnInfo}>
-                  <Text style={styles.txnDesc} numberOfLines={1}>{t.category}{t.subcategory ? ` · ${t.subcategory}` : ''}</Text>
-                  <Text style={styles.txnMeta}>{t.date}</Text>
+            {recentTxns.map((t: any, i: number) => {
+              const isTransfer = t.type === 'transfer';
+              const color = isTransfer ? Colors.blue : t.type === 'income' ? Colors.green : Colors.red;
+              const accName = (id: string) => accounts.find((a: any) => a.id === id)?.name || '';
+              return (
+                <View key={t.id} style={[styles.txnRow, i < recentTxns.length - 1 && styles.txnRowBorder]}>
+                  <View style={[styles.txnDot, { backgroundColor: color }]} />
+                  <View style={styles.txnInfo}>
+                    <Text style={styles.txnDesc} numberOfLines={1}>
+                      {isTransfer ? `${accName(t.account)} → ${accName(t.toAccount)}` : `${t.category}${t.subcategory ? ` · ${t.subcategory}` : ''}`}
+                    </Text>
+                    <Text style={styles.txnMeta}>{t.date}</Text>
+                  </View>
+                  <Text style={{ color, fontWeight: '700' }}>
+                    {isTransfer ? '⇄ ' : t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
+                  </Text>
                 </View>
-                <Text style={{ color: t.type === 'income' ? Colors.green : Colors.red, fontWeight: '700' }}>
-                  {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </Card>
         )}
 
@@ -152,7 +203,7 @@ export default function Dashboard() {
                 return (
                   <View key={b.id}>
                     <View style={styles.budgetTop}>
-                      <Text style={styles.budgetName}>{b.category}{b.subcategory ? ` · ${b.subcategory}` : ''}</Text>
+                      <Text style={styles.budgetName}>{b.category}</Text>
                       <Text style={[styles.budgetPct, { color }]}>{pct.toFixed(0)}%</Text>
                     </View>
                     <ProgressBar pct={pct} color={color} />
@@ -217,6 +268,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, marginBottom: Spacing.md },
   headerText: { flex: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  periodRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
+  periodPill: { flex: 1, paddingVertical: 8, borderRadius: Radius.sm, alignItems: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
+  periodPillActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  periodPillText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
+  periodPillTextActive: { color: Colors.accentLight },
   eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
   hint: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.sm,

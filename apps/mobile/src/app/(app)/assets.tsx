@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, FlatList, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TrendingUp, Plus, Edit2, Trash2, Settings2, Info } from 'lucide-react-native';
+import { TrendingUp, Plus, Edit2, Trash2, Settings2, Info, Search } from 'lucide-react-native';
 import { useApp, DEFAULT_ASSET_TYPES } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
@@ -45,6 +45,15 @@ export default function Assets() {
   const [form, setForm] = useState<any>(emptyForm());
   const [typeForm, setTypeForm] = useState<any>(emptyType());
   const { errors, validate, reset: resetErrors } = useFieldErrors();
+
+  // ── Search + type filter ──
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const filteredAssets = useMemo(() => assets.filter((a: any) => {
+    const matchesSearch = !search.trim() || a.name?.toLowerCase().includes(search.trim().toLowerCase());
+    const matchesType = !filterType || a.type === filterType;
+    return matchesSearch && matchesType;
+  }), [assets, search, filterType]);
 
   const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
   const openEdit = (a: any) => {
@@ -159,10 +168,30 @@ export default function Assets() {
             </View>
           }
         />
+        <View style={styles.filterRow}>
+          <View style={styles.searchWrap}>
+            <Search size={14} color={Colors.text3} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search assets…"
+              placeholderTextColor={Colors.text3}
+              value={search}
+              onChangeText={setSearch}
+            />
+          </View>
+          <SelectField
+            label=""
+            value={filterType}
+            placeholder="All Types"
+            options={[{ label: 'All Types', value: '' }, ...assetTypes.map((t: any) => ({ label: t.label, value: t.key }))]}
+            onChange={setFilterType}
+            style={styles.typeFilter}
+          />
+        </View>
       </View>
 
-      <FlatList extraData={fmt} 
-        data={assets}
+      <FlatList extraData={[fmt, filteredAssets.length]}
+        data={filteredAssets}
         keyExtractor={(a: any) => a.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={<EmptyState icon={TrendingUp} title="No Assets" description="Add gold, mutual funds, stocks etc." />}
@@ -326,6 +355,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   addBtn: { width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  filterRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md, alignItems: 'flex-start' },
+  searchWrap: { flex: 1, position: 'relative', justifyContent: 'center' },
+  searchIcon: { position: 'absolute', left: 12, zIndex: 1 },
+  searchInput: {
+    paddingVertical: 10, paddingLeft: 34, paddingRight: 12, borderRadius: Radius.sm,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1, fontSize: FontSize.base,
+  },
+  typeFilter: { flex: 1, marginBottom: 0 },
   listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
   card: { gap: 4 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

@@ -16,14 +16,17 @@ export default function Transactions() {
   const { toast, showToast } = useToast();
 
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [search, setSearch] = useState('');
+
+  const accName = (id: string) => accounts.find((a: any) => a.id === id)?.name || '';
 
   const filtered = transactions
     .filter((t: any) => filterType === 'all' || t.type === filterType)
     .filter((t: any) => {
       const q = search.toLowerCase();
-      return q === '' || t.category?.toLowerCase().includes(q) || t.subcategory?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q);
+      return q === '' || t.category?.toLowerCase().includes(q) || t.subcategory?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q)
+        || (t.type === 'transfer' && (accName(t.account).toLowerCase().includes(q) || accName(t.toAccount).toLowerCase().includes(q)));
     })
     .sort((a: any, b: any) => +new Date(b.date) - +new Date(a.date));
 
@@ -70,7 +73,7 @@ export default function Transactions() {
         />
       </View>
       <View style={styles.filterTabs}>
-        {(['all', 'income', 'expense'] as const).map((t) => (
+        {(['all', 'income', 'expense', 'transfer'] as const).map((t) => (
           <Pressable key={t} onPress={() => setFilterType(t)} style={[styles.filterTab, filterType === t && styles.filterTabActive]}>
             <Text style={[styles.filterTabText, filterType === t && styles.filterTabTextActive]}>{t[0].toUpperCase() + t.slice(1)}</Text>
           </Pressable>
@@ -85,22 +88,34 @@ export default function Transactions() {
         renderItem={({ item: t }) => {
           const acc = accounts.find((a: any) => a.id === t.account);
           const ev = events.find((e: any) => e.id === t.eventId);
+          const isTransfer = t.type === 'transfer';
+          const amountColor = isTransfer ? Colors.blue : t.type === 'income' ? Colors.green : Colors.red;
           return (
             <Card style={styles.txnCard}>
               <View style={styles.txnTop}>
                 <View style={{ flex: 1 }}>
                   <View style={styles.txnBadgeRow}>
-                    <Badge label={t.category} color={t.type === 'income' ? Colors.green : Colors.red} />
-                    {t.group ? <Badge label={t.group} color={Colors.accent2} /> : null}
-                    {ev ? <Badge label={ev.name} color={Colors.blue} /> : null}
+                    {isTransfer ? (
+                      <Badge label="Transfer" color={Colors.blue} />
+                    ) : (
+                      <>
+                        <Badge label={t.category} color={t.type === 'income' ? Colors.green : Colors.red} />
+                        {t.group ? <Badge label={t.group} color={Colors.accent2} /> : null}
+                        {ev ? <Badge label={ev.name} color={Colors.blue} /> : null}
+                      </>
+                    )}
                   </View>
-                  {t.subcategory ? <Text style={styles.txnSub}>{t.subcategory}</Text> : null}
+                  {isTransfer ? (
+                    <Text style={styles.txnSub}>{accName(t.account)} → {accName(t.toAccount)}</Text>
+                  ) : (
+                    t.subcategory ? <Text style={styles.txnSub}>{t.subcategory}</Text> : null
+                  )}
                   {t.notes ? <Text style={styles.txnNotes}>{t.notes}</Text> : null}
-                  <Text style={styles.txnMeta}>{t.date} • {acc?.name || 'No account'}</Text>
+                  <Text style={styles.txnMeta}>{t.date}{isTransfer ? '' : ` • ${acc?.name || 'No account'}`}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: Spacing.sm }}>
-                  <Text style={{ color: t.type === 'income' ? Colors.green : Colors.red, fontWeight: '700', fontSize: FontSize.md }}>
-                    {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
+                  <Text style={{ color: amountColor, fontWeight: '700', fontSize: FontSize.md }}>
+                    {isTransfer ? '⇄ ' : t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
                     <Pressable onPress={() => setModal({ mode: 'edit', data: t })} hitSlop={8}><Edit2 size={16} color={Colors.text2} /></Pressable>

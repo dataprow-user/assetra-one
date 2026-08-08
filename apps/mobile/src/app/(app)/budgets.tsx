@@ -125,12 +125,44 @@ export default function Budgets() {
 
   const openBulk = () => { setEntryMode('bulk'); if (!bulkGroup) setBulkGroup(groupList[0] || ''); loadExisting(); };
 
+  // Editing a sub-category amount auto-recomputes the category's "Overall ₹"
+  // box as the sum of that category's sub-categories, so you can either type
+  // one overall number OR break it down by sub-category and watch the total
+  // build itself. The overall box stays independently editable afterward —
+  // typing in it directly always wins until you edit a sub-category again.
+  const setSubAmount = (cat: any, sub: string, raw: string) => {
+    const val = sanitizeNumericInput(raw);
+    setBulkAmounts((a) => {
+      const next = { ...a, [bulkKey(cat.name, sub)]: val };
+      const subs: string[] = cat.subcategories || [];
+      const anyFilled = subs.some((s) => next[bulkKey(cat.name, s)]);
+      if (anyFilled) {
+        const sum = subs.reduce((s: number, name: string) => s + (Number(next[bulkKey(cat.name, name)]) || 0), 0);
+        next[bulkKey(cat.name)] = sum > 0 ? String(sum) : '';
+      }
+      return next;
+    });
+  };
+
   const saveBulk = () => {
     let count = 0;
+    // A category's "Overall ₹" box is auto-filled as a live preview whenever
+    // its sub-categories have amounts (see setSubAmount) — but that preview
+    // must NOT also be saved as its own row, or the same money gets counted
+    // twice wherever budgets are totaled (category row + its sub-category
+    // rows). Only persist the category-level row when there's no breakdown.
+    const catHasSubAmounts = new Set<string>();
+    Object.entries(bulkAmounts).forEach(([key, amount]) => {
+      if (!amount || Number(amount) <= 0) return;
+      const [cat, sub] = key.split('||');
+      if (sub !== '__cat__') catHasSubAmounts.add(cat);
+    });
+
     Object.entries(bulkAmounts).forEach(([key, amount]) => {
       if (!amount || Number(amount) <= 0) return;
       const [cat, sub] = key.split('||');
       const subVal = sub === '__cat__' ? '' : sub;
+      if (subVal === '' && catHasSubAmounts.has(cat)) return;
       const catObj = expenseCategories.find((c: any) => c.name === cat);
       const existing = budgets.find((b: any) =>
         b.category === cat && b.subcategory === subVal &&
@@ -145,6 +177,19 @@ export default function Budgets() {
       else dispatch({ type: 'ADD_BUDGET', payload: { ...payload, id: uid() } });
       count++;
     });
+
+    // Clean up any category-level row left over from before this category had
+    // a sub-category breakdown (e.g. saved as a whole category in an earlier
+    // month/session) — it would otherwise keep double-counting alongside the
+    // new sub-category rows just saved above.
+    catHasSubAmounts.forEach((cat) => {
+      const stale = budgets.find((b: any) =>
+        b.category === cat && !b.subcategory &&
+        b.month === MONTHS[viewMonth] && String(b.year) === String(viewYear)
+      );
+      if (stale) dispatch({ type: 'DELETE_BUDGET', payload: stale.id });
+    });
+
     Alert.alert('Saved', `${count} budget entries saved for ${MONTHS[viewMonth]} ${viewYear}.`);
   };
 
@@ -255,7 +300,7 @@ export default function Budgets() {
                           placeholder="₹"
                           placeholderTextColor={Colors.text3}
                           value={bulkAmounts[bulkKey(cat.name, sub)] || ''}
-                          onChangeText={(v) => setBulkAmounts((a) => ({ ...a, [bulkKey(cat.name, sub)]: sanitizeNumericInput(v) }))}
+                          onChangeText={(v) => setSubAmount(cat, sub, v)}
                         />
                       </View>
                     ))}

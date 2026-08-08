@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, IconBadge } from '../../../components/ui';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
@@ -18,6 +19,7 @@ const emptyForm = () => ({ name: '', type: 'bank', balance: '', currency: 'INR' 
 export default function Accounts() {
   const { state, dispatch, uid, fmt, fmtSigned, fmtN, amountsHidden, toggleAmounts } = useApp();
   const { accounts = [], transactions = [] } = state;
+  const router = useRouter();
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState(emptyForm());
   const { errors, validate, reset: resetErrors } = useFieldErrors();
@@ -86,10 +88,12 @@ export default function Accounts() {
                   <Pressable onPress={() => handleDelete(a.id)} hitSlop={8}><Trash2 size={15} color={Colors.red} /></Pressable>
                 </View>
               </View>
-              <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
-              <Text style={[styles.accountType, { color }]}>{a.type.replace('_', ' ')}</Text>
-              <Text style={[styles.accountBalance, { color: a.balance < 0 ? Colors.red : Colors.green }]}>{fmtSigned(a.balance)}</Text>
-              <Text style={styles.accountMeta}>{txnCount} txns • {a.currency}</Text>
+              <Pressable onPress={() => router.push({ pathname: '/(app)/account-detail', params: { id: a.id } } as any)}>
+                <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
+                <Text style={[styles.accountType, { color }]}>{a.type.replace('_', ' ')}</Text>
+                <Text style={[styles.accountBalance, { color: a.balance < 0 ? Colors.red : Colors.green }]}>{fmtSigned(a.balance)}</Text>
+                <Text style={styles.accountMeta}>{txnCount} txns • {a.currency} • Tap for history</Text>
+              </Pressable>
             </Card>
           );
         }}

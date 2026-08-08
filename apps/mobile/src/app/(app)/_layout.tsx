@@ -14,6 +14,12 @@ import { hasPin } from '../../utils/appLock';
 const ONBOARDING_KEY = 'a1_onboarded';
 const LAST_ACTIVE_KEY = 'a1_last_active';
 const AUTO_SIGNOUT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days of inactivity
+// Re-lock only after a REAL background stay of at least this long — avoids
+// re-prompting for a PIN on every brief 'inactive' blip (opening the
+// keyboard, a date picker, the share sheet, a permission dialog, etc. all
+// transiently fire 'inactive' on Android, especially on MIUI/HyperOS —
+// treating that the same as a true background/return was the bug).
+const RELOCK_GRACE_MS = 60 * 1000;
 
 // Persistent overlay (FAB) across every screen in the authenticated app —
 // same idea as the web app's app-wide "Add Transaction" button. Detail
@@ -27,6 +33,7 @@ export default function AppLayout() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [locked, setLocked] = useState(false);
   const appState = useRef(AppState.currentState);
+  const backgroundedAt = useRef<number | null>(null);
 
   // Signs out (forcing a fresh Google sign-in) if the app hasn't been opened
   // in AUTO_SIGNOUT_MS. Returns true if it signed out, so the caller can skip
@@ -53,12 +60,17 @@ export default function AppLayout() {
     })();
 
     const sub = AppState.addEventListener('change', (next) => {
-      const wasBackground = appState.current.match(/inactive|background/);
-      if (wasBackground && next === 'active') {
-        checkAutoSignoutAndTouch().then((signedOut) => {
-          if (signedOut) return;
-          hasPin().then((set) => { if (set) setLocked(true); });
-        });
+      if (next === 'background') backgroundedAt.current = Date.now();
+
+      const wasTrulyBackground = appState.current === 'background';
+      if (wasTrulyBackground && next === 'active') {
+        const awayMs = backgroundedAt.current ? Date.now() - backgroundedAt.current : Infinity;
+        if (awayMs >= RELOCK_GRACE_MS) {
+          checkAutoSignoutAndTouch().then((signedOut) => {
+            if (signedOut) return;
+            hasPin().then((set) => { if (set) setLocked(true); });
+          });
+        }
       }
       appState.current = next;
     });
@@ -102,6 +114,7 @@ export default function AppLayout() {
     <View style={{ flex: 1, backgroundColor: Colors.bgPrimary }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.bgPrimary } }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="account-detail" />
         <Stack.Screen name="assets" />
         <Stack.Screen name="liabilities" />
         <Stack.Screen name="budgets" />

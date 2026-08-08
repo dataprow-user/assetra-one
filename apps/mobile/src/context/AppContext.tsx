@@ -79,18 +79,28 @@ function normalizeLoaded(saved: any) {
   return saved;
 }
 
-function txDelta(t: any) {
-  if (!t || !t.account) return null;
+// Returns an array of {id, delta} balance changes for a transaction — plain
+// income/expense touch one account; a transfer moves the amount out of
+// `account` and into `toAccount` without counting as income or expense
+// anywhere (Dashboard/Reports/Budgets only ever check for 'income'/'expense'
+// explicitly, so a 'transfer' type is naturally excluded from those sums).
+function txDeltas(t: any): { id: string; delta: number }[] | null {
+  if (!t) return null;
   const amount = Number(t.amount) || 0;
-  if (t.type === 'income') return { id: t.account, delta: +amount };
-  if (t.type === 'expense') return { id: t.account, delta: -amount };
+  if (t.type === 'income' && t.account) return [{ id: t.account, delta: +amount }];
+  if (t.type === 'expense' && t.account) return [{ id: t.account, delta: -amount }];
+  if (t.type === 'transfer' && t.account && t.toAccount) return [{ id: t.account, delta: -amount }, { id: t.toAccount, delta: +amount }];
   return null;
 }
 
-function applyDelta(accounts: any[], delta: any) {
-  if (!delta) return accounts;
-  return accounts.map((a) => (a.id === delta.id ? { ...a, balance: (Number(a.balance) || 0) + delta.delta } : a));
+function applyDeltas(accounts: any[], deltas: { id: string; delta: number }[] | null) {
+  if (!deltas || deltas.length === 0) return accounts;
+  return deltas.reduce(
+    (accs, d) => accs.map((a) => (a.id === d.id ? { ...a, balance: (Number(a.balance) || 0) + d.delta } : a)),
+    accounts,
+  );
 }
+const negate = (deltas: { id: string; delta: number }[] | null) => (deltas ? deltas.map((d) => ({ id: d.id, delta: -d.delta })) : null);
 
 function reducer(state: any, action: any): any {
   switch (action.type) {
@@ -101,20 +111,19 @@ function reducer(state: any, action: any): any {
 
     case 'ADD_TRANSACTION': {
       const t = action.payload;
-      const accounts = applyDelta(state.accounts, txDelta(t));
+      const accounts = applyDeltas(state.accounts, txDeltas(t));
       return { ...state, transactions: [t, ...state.transactions], accounts };
     }
     case 'UPDATE_TRANSACTION': {
       const newT = action.payload;
       const oldT = state.transactions.find((t: any) => t.id === newT.id);
-      let accounts = applyDelta(state.accounts, oldT ? { id: txDelta(oldT)?.id, delta: -(txDelta(oldT)?.delta || 0) } : null);
-      accounts = applyDelta(accounts, txDelta(newT));
+      let accounts = applyDeltas(state.accounts, negate(txDeltas(oldT)));
+      accounts = applyDeltas(accounts, txDeltas(newT));
       return { ...state, transactions: state.transactions.map((t: any) => (t.id === newT.id ? newT : t)), accounts };
     }
     case 'DELETE_TRANSACTION': {
       const t = state.transactions.find((t: any) => t.id === action.payload);
-      const d = txDelta(t);
-      const accounts = d ? applyDelta(state.accounts, { id: d.id, delta: -d.delta }) : state.accounts;
+      const accounts = applyDeltas(state.accounts, negate(txDeltas(t)));
       return { ...state, transactions: state.transactions.filter((t: any) => t.id !== action.payload), accounts };
     }
 
