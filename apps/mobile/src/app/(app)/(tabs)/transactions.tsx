@@ -3,7 +3,7 @@ import { View, Text, FlatList, Pressable, TextInput, StyleSheet, Alert } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Edit2, Trash2, Wallet, Search, Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
-import { Card, Badge, EmptyState, Button, Toast } from '../../../components/ui';
+import { Card, Badge, EmptyState, Button, Toast, DateField } from '../../../components/ui';
 import { useToast } from '../../../hooks/useToast';
 import TransactionFormModal from '../../../components/TransactionFormModal';
 import { Colors, FontSize, Spacing, Radius } from '../../../constants/theme';
@@ -18,10 +18,24 @@ export default function Transactions() {
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [search, setSearch] = useState('');
+  const now = new Date();
+  const todayISO = now.toISOString().split('T')[0];
+  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const [rangeMode, setRangeMode] = useState<'all' | 'custom'>('all');
+  const [customFrom, setCustomFrom] = useState(monthStartISO);
+  const [customTo, setCustomTo] = useState(todayISO);
 
   const accName = (id: string) => accounts.find((a: any) => a.id === id)?.name || '';
 
-  const filtered = transactions
+  const dateFiltered = rangeMode !== 'custom' ? transactions : transactions.filter((t: any) => {
+    const d = new Date(t.date);
+    const start = new Date(customFrom);
+    const endRaw = new Date(customTo);
+    const end = new Date(endRaw.getFullYear(), endRaw.getMonth(), endRaw.getDate(), 23, 59, 59, 999);
+    return d >= start && d <= end;
+  });
+
+  const filtered = dateFiltered
     .filter((t: any) => filterType === 'all' || t.type === filterType)
     .filter((t: any) => {
       const q = search.toLowerCase();
@@ -80,7 +94,22 @@ export default function Transactions() {
         ))}
       </View>
 
-      <FlatList extraData={fmt} 
+      <View style={styles.periodRow}>
+        <Pressable onPress={() => setRangeMode('all')} style={[styles.periodPill, rangeMode === 'all' && styles.periodPillActive]}>
+          <Text style={[styles.periodPillText, rangeMode === 'all' && styles.periodPillTextActive]}>All Time</Text>
+        </Pressable>
+        <Pressable onPress={() => setRangeMode('custom')} style={[styles.periodPill, rangeMode === 'custom' && styles.periodPillActive]}>
+          <Text style={[styles.periodPillText, rangeMode === 'custom' && styles.periodPillTextActive]}>Custom Range</Text>
+        </Pressable>
+      </View>
+      {rangeMode === 'custom' && (
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.md }}>
+          <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
+          <DateField label="To" value={customTo} onChange={setCustomTo} maximumDate={new Date()} style={{ flex: 1 }} />
+        </View>
+      )}
+
+      <FlatList extraData={fmt}
         data={filtered}
         keyExtractor={(t) => t.id}
         contentContainerStyle={styles.listContent}
@@ -164,6 +193,11 @@ const styles = StyleSheet.create({
   filterTabActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)' },
   filterTabText: { color: Colors.text2, fontWeight: '500', fontSize: FontSize.base },
   filterTabTextActive: { color: Colors.accentLight },
+  periodRow: { flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  periodPill: { flex: 1, paddingVertical: 8, borderRadius: Radius.sm, alignItems: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
+  periodPillActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  periodPillText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
+  periodPillTextActive: { color: Colors.accentLight },
   listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
   txnCard: { gap: 4 },
   txnTop: { flexDirection: 'row', justifyContent: 'space-between' },

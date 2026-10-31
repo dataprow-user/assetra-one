@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../../context/AppContext';
-import { Card, Button, EmptyState, AppModal, FormField, SelectField, IconBadge } from '../../../components/ui';
+import { Card, Button, EmptyState, AppModal, FormField, SelectField, IconBadge, DateField } from '../../../components/ui';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius } from '../../../constants/theme';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../../utils/validation';
@@ -25,6 +25,24 @@ export default function Accounts() {
   const { errors, validate, reset: resetErrors } = useFieldErrors();
 
   const totalBalance = accounts.reduce((s: number, a: any) => s + a.balance, 0);
+
+  // Balances themselves are always current (a point-in-time number can't be
+  // "for a range"); the range instead filters the per-account In/Out shown
+  // below, so you can see cash flow for a period without opening each account.
+  const now = new Date();
+  const todayISO = now.toISOString().split('T')[0];
+  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const [rangeMode, setRangeMode] = useState<'all' | 'custom'>('all');
+  const [customFrom, setCustomFrom] = useState(monthStartISO);
+  const [customTo, setCustomTo] = useState(todayISO);
+
+  const dateFilteredTxns = rangeMode !== 'custom' ? transactions : transactions.filter((t: any) => {
+    const d = new Date(t.date);
+    const start = new Date(customFrom);
+    const endRaw = new Date(customTo);
+    const end = new Date(endRaw.getFullYear(), endRaw.getMonth(), endRaw.getDate(), 23, 59, 59, 999);
+    return d >= start && d <= end;
+  });
 
   const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
   const openEdit = (a: any) => { setForm({ ...a, balance: String(a.balance) }); resetErrors(); setModal({ mode: 'edit', data: a }); };
@@ -68,7 +86,22 @@ export default function Accounts() {
         <Button title="Add" icon={<Plus size={16} color="#fff" />} size="sm" onPress={openAdd} />
       </View>
 
-      <FlatList extraData={fmt} 
+      <View style={styles.periodRow}>
+        <Pressable onPress={() => setRangeMode('all')} style={[styles.periodPill, rangeMode === 'all' && styles.periodPillActive]}>
+          <Text style={[styles.periodPillText, rangeMode === 'all' && styles.periodPillTextActive]}>All Time</Text>
+        </Pressable>
+        <Pressable onPress={() => setRangeMode('custom')} style={[styles.periodPill, rangeMode === 'custom' && styles.periodPillActive]}>
+          <Text style={[styles.periodPillText, rangeMode === 'custom' && styles.periodPillTextActive]}>Custom Range</Text>
+        </Pressable>
+      </View>
+      {rangeMode === 'custom' && (
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.md }}>
+          <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
+          <DateField label="To" value={customTo} onChange={setCustomTo} maximumDate={new Date()} style={{ flex: 1 }} />
+        </View>
+      )}
+
+      <FlatList extraData={[fmt, rangeMode, customFrom, customTo]}
         data={accounts}
         keyExtractor={(a) => a.id}
         numColumns={2}
@@ -78,7 +111,13 @@ export default function Accounts() {
         renderItem={({ item: a }) => {
           const Icon = TYPE_ICONS[a.type] || Wallet;
           const color = TYPE_COLORS[a.type] || Colors.accentLight;
-          const txnCount = transactions.filter((t: any) => t.account === a.id).length;
+          const accTxns = dateFilteredTxns.filter((t: any) => t.account === a.id || t.toAccount === a.id);
+          const periodIn = accTxns
+            .filter((t: any) => t.type === 'income' || (t.type === 'transfer' && t.toAccount === a.id))
+            .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+          const periodOut = accTxns
+            .filter((t: any) => t.type === 'expense' || (t.type === 'transfer' && t.account === a.id))
+            .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
           return (
             <Card style={styles.accountCard}>
               <View style={styles.accountTop}>
@@ -92,7 +131,9 @@ export default function Accounts() {
                 <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
                 <Text style={[styles.accountType, { color }]}>{a.type.replace('_', ' ')}</Text>
                 <Text style={[styles.accountBalance, { color: a.balance < 0 ? Colors.red : Colors.green }]}>{fmtSigned(a.balance)}</Text>
-                <Text style={styles.accountMeta}>{txnCount} txns • {a.currency} • Tap for history</Text>
+                <Text style={styles.accountMeta}>
+                  <Text style={{ color: Colors.green }}>+{fmt(periodIn)}</Text> · <Text style={{ color: Colors.red }}>-{fmt(periodOut)}</Text> • {a.currency}
+                </Text>
               </Pressable>
             </Card>
           );
@@ -126,6 +167,11 @@ export default function Accounts() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, gap: Spacing.md },
+  periodRow: { flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  periodPill: { flex: 1, paddingVertical: 8, borderRadius: Radius.sm, alignItems: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
+  periodPillActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  periodPillText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
+  periodPillTextActive: { color: Colors.accentLight },
   eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
   title: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text1 },
   subtitle: { fontSize: FontSize.base, color: Colors.text2, marginTop: 2 },

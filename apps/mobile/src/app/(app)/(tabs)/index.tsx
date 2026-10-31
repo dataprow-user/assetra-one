@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { TrendingUp, Wallet, ArrowDownRight, ArrowUpRight, Eye, EyeOff, Settings as SettingsIcon, LogOut, Search } from 'lucide-react-native';
+import { TrendingUp, Wallet, ArrowDownRight, ArrowUpRight, Eye, EyeOff, Settings as SettingsIcon, LogOut, Search, ChevronDown, ChevronRight } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
 import { Card, StatCard, ProgressBar, EmptyState, DriveConnectBanner, DateField } from '../../../components/ui';
 import SearchModal from '../../../components/SearchModal';
@@ -69,12 +69,14 @@ export default function Dashboard() {
   }
   const periodBudgetsRaw = budgets.filter((b: any) => periodMonths.some((m) => m.month === b.month && String(m.year) === String(b.year)));
 
-  // Rolled up to category level for the dashboard — a category split across
-  // several sub-category budget rows shows as one combined line here.
+  // Rolled up to category level for the dashboard by default — a category
+  // split across several sub-category budget rows shows as one combined line
+  // — but each keeps its raw sub-rows so tapping it can expand the breakdown.
   const thisMonthBudgets: any[] = Object.values(
     periodBudgetsRaw.reduce((acc: Record<string, any>, b: any) => {
-      if (!acc[b.category]) acc[b.category] = { id: `cat-${b.category}`, category: b.category, plannedAmount: 0 };
+      if (!acc[b.category]) acc[b.category] = { id: `cat-${b.category}`, category: b.category, plannedAmount: 0, subBudgets: [] as any[] };
       acc[b.category].plannedAmount += Number(b.plannedAmount || 0);
+      acc[b.category].subBudgets.push(b);
       return acc;
     }, {} as Record<string, any>),
   );
@@ -82,7 +84,16 @@ export default function Dashboard() {
   const getBudgetSpent = (b: any) => thisMonthTxns
     .filter((t: any) => t.type === 'expense' && t.category === b.category)
     .reduce((s: number, t: any) => s + t.amount, 0);
+  const getSubBudgetSpent = (b: any) => thisMonthTxns
+    .filter((t: any) => t.type === 'expense' && t.category === b.category && (!b.subcategory || t.subcategory === b.subcategory))
+    .reduce((s: number, t: any) => s + t.amount, 0);
   const budgetUsagePct = monthBudgeted > 0 ? Math.min((monthExpense / monthBudgeted) * 100, 100) : 0;
+  const monthRemaining = monthBudgeted - monthExpense;
+
+  // Category rows default collapsed — tap one to reveal its sub-category
+  // breakdown, when it has one.
+  const [expandedBudgetCats, setExpandedBudgetCats] = useState<Record<string, boolean>>({});
+  const toggleBudgetCat = (cat: string) => setExpandedBudgetCats((e) => ({ ...e, [cat]: !e[cat] }));
 
   const recentTxns = [...transactions].sort((a: any, b: any) => +new Date(b.date) - +new Date(a.date)).slice(0, 6);
 
@@ -193,6 +204,9 @@ export default function Dashboard() {
                 <Text style={styles.budgetNumText}>{fmt(monthExpense)} spent</Text>
                 <Text style={styles.budgetNumText}>{fmt(monthBudgeted)} budgeted</Text>
               </View>
+              <Text style={[styles.budgetRemainingText, { color: monthRemaining >= 0 ? Colors.green : Colors.red }]}>
+                {monthRemaining >= 0 ? fmt(monthRemaining) + ' remaining' : fmt(Math.abs(monthRemaining)) + ' over budget'}
+              </Text>
             </Card>
 
             <Card style={{ gap: Spacing.md }}>
@@ -200,17 +214,50 @@ export default function Dashboard() {
                 const spent = getBudgetSpent(b);
                 const pct = b.plannedAmount > 0 ? Math.min((spent / b.plannedAmount) * 100, 100) : 0;
                 const color = pct >= 100 ? Colors.red : pct >= 80 ? Colors.yellow : Colors.green;
+                const namedSubs = b.subBudgets.filter((sb: any) => sb.subcategory);
+                const canExpand = namedSubs.length > 0;
+                const expanded = !!expandedBudgetCats[b.category];
                 return (
                   <View key={b.id}>
-                    <View style={styles.budgetTop}>
-                      <Text style={styles.budgetName}>{b.category}</Text>
-                      <Text style={[styles.budgetPct, { color }]}>{pct.toFixed(0)}%</Text>
-                    </View>
-                    <ProgressBar pct={pct} color={color} />
-                    <View style={styles.budgetNums}>
-                      <Text style={styles.budgetNumText}>{fmt(spent)} spent</Text>
-                      <Text style={styles.budgetNumText}>{fmt(b.plannedAmount)} limit</Text>
-                    </View>
+                    <Pressable onPress={() => canExpand && toggleBudgetCat(b.category)} disabled={!canExpand}>
+                      <View style={styles.budgetTop}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
+                          {canExpand ? (
+                            expanded ? <ChevronDown size={14} color={Colors.text2} /> : <ChevronRight size={14} color={Colors.text2} />
+                          ) : null}
+                          <Text style={styles.budgetName}>{b.category}</Text>
+                        </View>
+                        <Text style={[styles.budgetPct, { color }]}>{pct.toFixed(0)}%</Text>
+                      </View>
+                      <ProgressBar pct={pct} color={color} />
+                      <View style={styles.budgetNums}>
+                        <Text style={styles.budgetNumText}>{fmt(spent)} spent</Text>
+                        <Text style={styles.budgetNumText}>{fmt(b.plannedAmount)} limit</Text>
+                      </View>
+                    </Pressable>
+
+                    {expanded && (
+                      <View style={styles.subBudgetList}>
+                        {b.subBudgets.map((sb: any) => {
+                          const subSpent = getSubBudgetSpent(sb);
+                          const subPct = sb.plannedAmount > 0 ? Math.min((subSpent / sb.plannedAmount) * 100, 100) : 0;
+                          const subColor = subPct >= 100 ? Colors.red : subPct >= 80 ? Colors.yellow : Colors.green;
+                          return (
+                            <View key={sb.id} style={styles.subBudgetRow}>
+                              <View style={styles.budgetTop}>
+                                <Text style={styles.subBudgetName}>{sb.subcategory || '(No sub-category)'}</Text>
+                                <Text style={[styles.budgetPct, { color: subColor }]}>{subPct.toFixed(0)}%</Text>
+                              </View>
+                              <ProgressBar pct={subPct} color={subColor} />
+                              <View style={styles.budgetNums}>
+                                <Text style={styles.budgetNumText}>{fmt(subSpent)} spent</Text>
+                                <Text style={styles.budgetNumText}>{fmt(sb.plannedAmount)} limit</Text>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -296,6 +343,10 @@ const styles = StyleSheet.create({
   budgetPct: { fontWeight: '700', fontSize: FontSize.base },
   budgetNums: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
   budgetNumText: { fontSize: FontSize.sm, color: Colors.text2 },
+  budgetRemainingText: { fontSize: FontSize.sm, fontWeight: '700', textAlign: 'right' },
+  subBudgetList: { marginTop: Spacing.sm, marginLeft: Spacing.lg, gap: Spacing.sm, paddingLeft: Spacing.sm, borderLeftWidth: 1, borderLeftColor: Colors.border },
+  subBudgetRow: { gap: 4 },
+  subBudgetName: { color: Colors.text2, fontSize: FontSize.sm, fontWeight: '600', flex: 1 },
   dueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dueName: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base },
   dueBadge: { fontSize: FontSize.sm, fontWeight: '600', marginTop: 2 },
