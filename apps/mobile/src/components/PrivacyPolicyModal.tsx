@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { Text } from './ui/AppText';
 import { Shield } from 'lucide-react-native';
 import AppModal from './ui/AppModal';
 import Button from './ui/Button';
-import { Colors, FontSize, Spacing } from '../constants/theme';
+import { Colors, FontSize, Spacing, createStyles } from '../constants/theme';
 
 // Mirrors apps/web/src/components/PrivacyPolicyModal.jsx — same content,
 // shared by Login and Settings.
@@ -56,11 +57,11 @@ export default function PrivacyPolicyModal({ onClose }: { onClose: () => void })
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.lg },
   h3: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text1 },
   metaText: { fontSize: FontSize.sm, color: Colors.text2, marginTop: 2 },
   h4: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text1, marginTop: Spacing.lg, marginBottom: 6 },
   body: { fontSize: FontSize.base, color: Colors.text2, lineHeight: 20 },
   bold: { fontWeight: '700', color: Colors.text1 },
-});
+}));

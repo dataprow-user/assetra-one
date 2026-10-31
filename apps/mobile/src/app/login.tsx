@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet, Linking } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, StyleSheet, Linking } from 'react-native';
+import { Text } from '../components/ui/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, ShieldCheck, CloudCog, Wallet, TrendingUp, PieChart } from 'lucide-react-native';
@@ -9,7 +10,8 @@ import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { useApp } from '../context/AppContext';
 import { useGoogleSignIn } from '../utils/googleAuth';
 import { trackUserEvent } from '../utils/userTracker';
-import { Colors, FontSize, Spacing, Radius, Shadow } from '../constants/theme';
+// The sign-in screen is a fixed dark brand gradient in every theme.
+import { DarkColors as Colors, FontSize, Spacing, Radius, Shadow } from '../constants/theme';
 
 const TRUST_BADGES = [
   { icon: Lock, label: 'Secured by Google Sign-In' },
@@ -45,7 +47,7 @@ export default function Login() {
   };
 
   return (
-    <LinearGradient colors={['#0a0e1c', '#120b2e', '#06111f']} style={{ flex: 1 }}>
+    <LinearGradient colors={['#1e1b4b', '#3730a3', '#0e7490']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.brandRow}>
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
   featureIcon: {
-    width: 32, height: 32, borderRadius: 9, backgroundColor: 'rgba(99,102,241,0.18)',
+    width: 32, height: 32, borderRadius: 9, backgroundColor: 'rgba(79,70,229,0.18)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
   },
   featureTitle: { fontSize: FontSize.base, fontWeight: '600', color: '#fff', marginBottom: 2 },

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Modal, View, Pressable, StyleSheet } from 'react-native';
+import { Text } from './ui/AppText';
 import {
   Sparkles, LayoutDashboard, Wallet, List, TrendingUp,
   PieChart, Shield, Tags, Settings as SettingsIcon,
   ChevronLeft, ChevronRight, X,
 } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Shadow } from '../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Shadow, createStyles } from '../constants/theme';
 
 // Mirrors apps/web/src/components/OnboardingTour.jsx — same 10 steps.
 const STEPS = [
@@ -62,15 +63,15 @@ export default function OnboardingTour({ onFinish }: { onFinish: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', padding: Spacing.lg },
   box: {
-    width: '100%', maxWidth: 380, backgroundColor: '#141824', borderRadius: Radius.lg,
+    width: '100%', maxWidth: 380, backgroundColor: Colors.modalBg, borderRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.borderStrong, padding: Spacing.xl, alignItems: 'center', ...Shadow.xl,
   },
   skipBtn: { position: 'absolute', top: Spacing.md, right: Spacing.md, padding: 6 },
   iconWrap: {
-    width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(99,102,241,0.15)',
+    width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(79,70,229,0.15)',
     alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md,
   },
   title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text1, textAlign: 'center', marginBottom: 8 },
@@ -83,4 +84,4 @@ const styles = StyleSheet.create({
   ghostText: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base },
   primaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: Colors.accent, borderRadius: Radius.sm, paddingVertical: 10 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: FontSize.base },
-});
+}));

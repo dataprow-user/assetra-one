@@ -21,6 +21,10 @@ const AUTO_SIGNOUT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days of inactivity
 // treating that the same as a true background/return was the bug).
 const RELOCK_GRACE_MS = 60 * 1000;
 
+// The navigator remounts when the theme is switched; remembering which session
+// already passed the startup gate stops that remount from re-prompting the PIN.
+let gatedSession: any = null;
+
 // Persistent overlay (FAB) across every screen in the authenticated app —
 // same idea as the web app's app-wide "Add Transaction" button. Detail
 // screens (assets, liabilities, ...) are pushed on top of the tab bar as
@@ -52,8 +56,10 @@ export default function AppLayout() {
   // once so it isn't immediately followed by a PIN prompt too. Also locks
   // again whenever the app returns to the foreground after being backgrounded.
   useEffect(() => {
-    if (!currentUser) return;
-    (async () => {
+    if (!currentUser) { gatedSession = null; return; }
+    const alreadyGated = gatedSession === currentUser;
+    gatedSession = currentUser;
+    if (!alreadyGated) (async () => {
       if (await checkAutoSignoutAndTouch()) return;
       if (justSignedIn) { setJustSignedIn(false); return; }
       if (await hasPin()) setLocked(true);
@@ -118,6 +124,7 @@ export default function AppLayout() {
         <Stack.Screen name="assets" />
         <Stack.Screen name="liabilities" />
         <Stack.Screen name="budgets" />
+        <Stack.Screen name="budget-vs-spent" />
         <Stack.Screen name="events" />
         <Stack.Screen name="insurance" />
         <Stack.Screen name="categories" />

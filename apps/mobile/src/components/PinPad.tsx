@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { Text } from './ui/AppText';
 import { Delete } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing } from '../constants/theme';
+import { Colors, Radius, FontSize, Spacing, createStyles } from '../constants/theme';
 
 const PIN_LENGTH = 4;
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
@@ -33,7 +34,7 @@ export default function PinPad({
 
       <View style={styles.dots}>
         {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-          <View key={i} style={[styles.dot, i < pin.length && styles.dotFilled]} />
+          <View key={i} style={[styles.dot, i < pin.length && styles.dotFilled]} accessibilityElementsHidden />
         ))}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -44,9 +45,11 @@ export default function PinPad({
             key={i}
             disabled={k === ''}
             onPress={() => press(k)}
-            style={({ pressed }) => [styles.key, pressed && k !== '' && styles.keyPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={k === 'del' ? 'Delete last digit' : k === '' ? undefined : `Digit ${k}`}
+            style={({ pressed }) => [styles.key, k === '' && styles.keyEmpty, pressed && k !== '' && styles.keyPressed]}
           >
-            {k === 'del' ? <Delete size={22} color={Colors.text1} /> : <Text style={styles.keyText}>{k}</Text>}
+            {k === 'del' ? <Delete size={20} color={Colors.text2} /> : <Text style={styles.keyText}>{k}</Text>}
           </Pressable>
         ))}
       </View>
@@ -54,19 +57,21 @@ export default function PinPad({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   wrap: { alignItems: 'center', width: '100%' },
-  title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text1, textAlign: 'center' },
-  subtitle: { fontSize: FontSize.base, color: Colors.text2, textAlign: 'center', marginTop: 6 },
-  dots: { flexDirection: 'row', gap: 16, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: Colors.borderStrong },
-  dotFilled: { backgroundColor: Colors.accentLight, borderColor: Colors.accentLight },
+  title: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text1, textAlign: 'center' },
+  subtitle: { fontSize: FontSize.sm, color: Colors.text2, textAlign: 'center', marginTop: 6 },
+  dots: { flexDirection: 'row', gap: 18, marginTop: Spacing.xl, marginBottom: Spacing.md },
+  dot: { width: 13, height: 13, borderRadius: 7, borderWidth: 1.5, borderColor: Colors.borderStrong },
+  dotFilled: { backgroundColor: Colors.accentLight, borderColor: Colors.accentLight, shadowColor: Colors.accentLight, shadowOpacity: 0.6, shadowRadius: 6, shadowOffset: { width: 0, height: 0 }, elevation: 3 },
   error: { color: Colors.red, fontSize: FontSize.sm, marginBottom: Spacing.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', width: 260, justifyContent: 'space-between', marginTop: Spacing.lg },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', width: 228, justifyContent: 'space-between', marginTop: Spacing.lg },
   key: {
-    width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
+    width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center',
     marginBottom: Spacing.md, backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
+    shadowColor: '#2a2f78', shadowOffset: { width: 0, height: 3 }, shadowOpacity: Colors.shadowOpacity < 0.2 ? 0.12 : 0, shadowRadius: 8, elevation: Colors.shadowOpacity < 0.2 ? 2 : 0,
   },
-  keyPressed: { backgroundColor: Colors.panelHover },
-  keyText: { fontSize: FontSize.xxl, fontWeight: '600', color: Colors.text1 },
-});
+  keyEmpty: { backgroundColor: 'transparent', borderWidth: 0, elevation: 0, shadowOpacity: 0 },
+  keyPressed: { backgroundColor: Colors.accentGlow, borderColor: Colors.accentLight },
+  keyText: { fontSize: FontSize.xl, fontWeight: '600', color: Colors.text1 },
+}));

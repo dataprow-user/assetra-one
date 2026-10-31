@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Radius } from '../../constants/theme';
+import { Radius, createStyles } from '../../constants/theme';
 
 export default function IconBadge({
   icon: Icon, color, size = 38,
@@ -12,6 +12,6 @@ export default function IconBadge({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-});
+}));

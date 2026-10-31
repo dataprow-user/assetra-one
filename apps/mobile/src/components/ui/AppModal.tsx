@@ -1,7 +1,8 @@
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Modal, View, Pressable, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text } from './AppText';
 import { X } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Shadow } from '../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Shadow, createStyles } from '../../constants/theme';
 
 // Bottom-sheet modal for every Add/Edit form: a scrollable body for the
 // fields plus a fixed footer (Save/Cancel) that stays above the keyboard.
@@ -32,10 +33,10 @@ export default function AppModal({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   box: {
-    maxHeight: '85%', backgroundColor: '#141824',
+    maxHeight: '85%', backgroundColor: Colors.modalBg,
     borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.borderStrong, ...Shadow.xl, overflow: 'hidden',
   },
@@ -46,5 +47,5 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text1 },
   closeBtn: { padding: 6, borderRadius: Radius.sm },
   body: { padding: Spacing.lg },
-  footer: { padding: Spacing.lg, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: '#141824' },
-});
+  footer: { padding: Spacing.lg, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.modalBg },
+}));

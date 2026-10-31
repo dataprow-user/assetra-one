@@ -1,17 +1,21 @@
+import RecordSheet from '../../components/RecordSheet';
 import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, FlatList, Pressable, Alert } from 'react-native';
+import { Text } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CreditCard, Plus, Edit2, Trash2, Settings2 } from 'lucide-react-native';
 import { useApp, DEFAULT_LIABILITY_TYPES } from '../../context/AppContext';
-import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge, ProgressBar, DateField } from '../../components/ui';
+import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge, DateField, PageHero, FilterChips, Tap } from '../../components/ui';
+import type { ChipOption } from '../../components/ui';
+import Ring from '../../components/charts/Ring';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
-import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, MAX_RATE, MAX_TENURE_MONTHS, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Liabilities.jsx — same fields/calculations,
 // rendered as cards instead of a table.
 
-const SWATCH_COLORS = [Colors.accent, Colors.green, Colors.red, Colors.yellow, Colors.blue, Colors.accent2, '#f97316', '#06b6d4'];
+const getSwatches = () => [Colors.accent, Colors.green, Colors.red, Colors.yellow, Colors.blue, Colors.accent2, '#f97316', '#06b6d4'];
 
 const emptyForm = () => ({ name: '', type: 'home_loan', principal: '', interestRate: '', tenureMonths: '', emi: '', startDate: '', outstanding: '' });
 const emptyType = () => ({ label: '', color: Colors.red });
@@ -32,6 +36,7 @@ export default function Liabilities() {
   const typeLabels: Record<string, string> = {}, typeColors: Record<string, string> = {};
   libTypes.forEach((t: any) => { typeLabels[t.key] = t.label; typeColors[t.key] = t.color; });
 
+  const [detail, setDetail] = useState<any>(null);
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [typeModal, setTypeModal] = useState<any>(null); // null | 'manage' | { mode, data? }
   const [form, setForm] = useState<any>(emptyForm());
@@ -133,6 +138,34 @@ export default function Liabilities() {
 
   const totalOutstanding = liabilities.reduce((s: number, l: any) => s + Number(l.outstanding || 0), 0);
   const totalEmi = liabilities.reduce((s: number, l: any) => s + Number(l.emi || 0), 0);
+  const totalPrincipal = liabilities.reduce((s: number, l: any) => s + Number(l.principal || 0), 0);
+  const totalRepaid = totalPrincipal - totalOutstanding;
+  const overallPct = totalPrincipal > 0 ? Math.max(0, Math.min((totalRepaid / totalPrincipal) * 100, 100)) : 0;
+
+  const [filterType, setFilterType] = useState('all');
+  const shown = filterType === 'all' ? liabilities : liabilities.filter((l: any) => l.type === filterType);
+  const chipOptions: ChipOption[] = [
+    { key: 'all', label: 'All', count: liabilities.length },
+    ...libTypes
+      .map((t: any) => ({ key: t.key as string, label: t.label as string, color: t.color as string, count: liabilities.filter((l: any) => l.type === t.key).length }))
+      .filter((o: any) => o.count > 0 || o.key === filterType),
+  ];
+
+  const header = (
+    <View style={styles.listHeader}>
+      <PageHero
+        label="Total outstanding"
+        value={fmt(totalOutstanding)}
+        sub={liabilities.length === 0 ? 'No loans tracked yet' : `EMI ${fmt(totalEmi)} / month • ${overallPct.toFixed(0)}% repaid overall`}
+        stats={[
+          { label: 'Principal', value: fmt(totalPrincipal) },
+          { label: 'Repaid', value: fmt(totalRepaid) },
+          { label: 'Monthly EMI', value: fmt(totalEmi) },
+        ]}
+      />
+      {liabilities.length > 0 ? <FilterChips options={chipOptions} value={filterType} onChange={setFilterType} /> : null}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -140,18 +173,12 @@ export default function Liabilities() {
         <ScreenHeader
           title="Liabilities"
           showBack
-          subtitle={
-            <>
-              Outstanding: <Text style={{ color: Colors.red }}>{fmt(totalOutstanding)}</Text> • Monthly EMI:{' '}
-              <Text style={{ color: Colors.yellow }}>{fmt(totalEmi)}</Text>
-            </>
-          }
           right={
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <Pressable onPress={openTypeManager} style={styles.iconBtn} hitSlop={8}>
+              <Pressable onPress={openTypeManager} style={styles.iconBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel="Manage liability types">
                 <Settings2 size={18} color={Colors.text2} />
               </Pressable>
-              <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={8}>
+              <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel="Add liability">
                 <Plus size={20} color="#fff" />
               </Pressable>
             </View>
@@ -159,50 +186,67 @@ export default function Liabilities() {
         />
       </View>
 
-      <FlatList extraData={fmt} 
-        data={liabilities}
+      <FlatList extraData={[fmt, filterType]}
+        data={shown}
         keyExtractor={(l: any) => l.id}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<EmptyState icon={CreditCard} title="No Liabilities" description="Add home loans, personal loans, gold loans etc." />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          liabilities.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <View style={[styles.emptyIcon, { backgroundColor: Colors.redBg }]}><CreditCard size={26} color={Colors.red} /></View>
+              <Text style={styles.emptyTitle}>No liabilities</Text>
+              <Text style={styles.emptyText}>Add home, personal or gold loans to watch your repayment progress.</Text>
+              <Button title="Add your first loan" icon={<Plus size={16} color="#fff" />} onPress={openAdd} />
+            </Card>
+          ) : (
+            <EmptyState icon={CreditCard} title="No loans of this type" description="Pick another filter above." />
+          )
+        }
         renderItem={({ item: l }: { item: any }) => {
           const color = typeColors[l.type] || Colors.text2;
           const paid = Number(l.principal || 0) - Number(l.outstanding || 0);
           const pct = l.principal ? (paid / l.principal) * 100 : 0;
+          const ringColor = pct >= 75 ? Colors.green : pct >= 35 ? Colors.yellow : Colors.accentLight;
           return (
-            <Card style={styles.card}>
-              <View style={styles.topRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name} numberOfLines={1}>{l.name}</Text>
-                  <Badge label={typeLabels[l.type] || l.type} color={color} style={{ marginTop: 6 }} />
+            <Tap onPress={() => setDetail(l)} accessibilityLabel={`${l.name}, ${typeLabels[l.type] || l.type}, outstanding ${fmt(l.outstanding)}, ${pct.toFixed(0)} percent repaid. Tap for details`}>
+              <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: color }]}>
+                <View style={styles.topRow}>
+                  <View style={{ flex: 1, flexShrink: 1 }}>
+                    <Text style={styles.name} numberOfLines={1}>{l.name}</Text>
+                    <Badge label={typeLabels[l.type] || l.type} color={color} style={{ marginTop: 6, alignSelf: 'flex-start' }} />
+                  </View>
+                  <View style={styles.actionsRow}>
+                    <Pressable onPress={() => openEdit(l)} hitSlop={8} style={styles.miniBtn} accessibilityRole="button" accessibilityLabel={`Edit ${l.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
+                    <Pressable onPress={() => handleDelete(l.id)} hitSlop={8} style={styles.miniBtn} accessibilityRole="button" accessibilityLabel={`Delete ${l.name}`}><Trash2 size={16} color={Colors.red} /></Pressable>
+                  </View>
                 </View>
-                <View style={styles.actionsRow}>
-                  <Pressable onPress={() => openEdit(l)} hitSlop={8}><Edit2 size={15} color={Colors.text2} /></Pressable>
-                  <Pressable onPress={() => handleDelete(l.id)} hitSlop={8}><Trash2 size={15} color={Colors.red} /></Pressable>
-                </View>
-              </View>
 
-              <View style={styles.metaRow}>
-                <Text style={styles.metaText}>{l.interestRate}% p.a.</Text>
-                <Text style={styles.metaText}>{l.tenureMonths} mo</Text>
-                <Text style={[styles.metaText, { color: Colors.red }]}>EMI {fmt(l.emi)}/mo</Text>
-              </View>
-
-              <View style={styles.valuesRow}>
-                <View style={styles.valueCol}>
-                  <Text style={styles.valueLabel}>Principal</Text>
-                  <Text style={[styles.valueAmt, { color: Colors.text1 }]}>{fmt(l.principal)}</Text>
+                <View style={styles.body}>
+                  <Ring pct={pct} color={ringColor} size={64} thickness={8} center={`${pct.toFixed(0)}%`} />
+                  <View style={styles.figures}>
+                    <Text style={styles.valueLabel}>Outstanding</Text>
+                    <Text style={styles.bigValue} numberOfLines={1} adjustsFontSizeToFit>{fmt(l.outstanding)}</Text>
+                    <Text style={styles.metaText} numberOfLines={1}>of {fmt(l.principal)} • {pct.toFixed(0)}% repaid</Text>
+                  </View>
                 </View>
-                <View style={styles.valueCol}>
-                  <Text style={styles.valueLabel}>Outstanding</Text>
-                  <Text style={[styles.valueAmt, { color: Colors.red }]}>{fmt(l.outstanding)}</Text>
-                </View>
-              </View>
 
-              <View style={{ marginTop: Spacing.md }}>
-                <ProgressBar pct={pct} color={Colors.green} />
-                <Text style={styles.pctText}>{pct.toFixed(0)}% paid</Text>
-              </View>
-            </Card>
+                <View style={styles.valuesRow}>
+                  <View style={styles.valueCol}>
+                    <Text style={styles.valueLabel}>EMI</Text>
+                    <Text style={[styles.valueAmt, { color: Colors.yellow }]} numberOfLines={1} adjustsFontSizeToFit>{fmt(l.emi)}/mo</Text>
+                  </View>
+                  <View style={styles.valueCol}>
+                    <Text style={styles.valueLabel}>Rate</Text>
+                    <Text style={styles.valueAmt} numberOfLines={1}>{l.interestRate}% p.a.</Text>
+                  </View>
+                  <View style={styles.valueCol}>
+                    <Text style={styles.valueLabel}>Tenure</Text>
+                    <Text style={styles.valueAmt} numberOfLines={1}>{l.tenureMonths} mo</Text>
+                  </View>
+                </View>
+              </Card>
+            </Tap>
           );
         }}
       />
@@ -273,18 +317,44 @@ export default function Liabilities() {
             maxLength={MAX_SHORT_LENGTH} placeholder="e.g. Business Loan" />
           <Text style={styles.label}>Color</Text>
           <View style={styles.swatchRow}>
-            {SWATCH_COLORS.map((c) => (
+            {getSwatches().map((c) => (
               <Pressable key={c} onPress={() => setTypeForm((f: any) => ({ ...f, color: c }))}
                 style={[styles.swatch, { backgroundColor: c }, typeForm.color === c && styles.swatchActive]} />
             ))}
           </View>
         </AppModal>
       )}
+      {(() => {
+        const l = detail ? liabilities.find((x: any) => x.id === detail.id) : null;
+        if (!l) return null;
+        const paid = Number(l.principal || 0) - Number(l.outstanding || 0);
+        const pct = l.principal ? (paid / l.principal) * 100 : 0;
+        const linkedAsset = l.collateral ? (state.assets || []).find((a: any) => a.id === l.collateral)?.name : undefined;
+        return (
+          <RecordSheet
+            visible title={l.name} subtitle={typeLabels[l.type] || l.type}
+            headlineLabel="Outstanding" headline={fmt(l.outstanding)} headlineColor={Colors.red}
+            progress={pct} progressColor={Colors.green} progressNote={`${pct.toFixed(0)}% repaid • ${fmt(paid)} of ${fmt(l.principal)}`}
+            rows={[
+              ['Original loan', fmt(l.principal)],
+              ['Repaid so far', fmt(paid)],
+              ['Interest rate', l.interestRate ? `${l.interestRate}% p.a.` : undefined],
+              ['Monthly EMI', l.emi ? fmt(l.emi) : undefined],
+              ['Tenure', l.tenureMonths ? `${l.tenureMonths} months` : undefined],
+              ['Start date', l.startDate],
+              ['Collateral', linkedAsset],
+            ]}
+            onClose={() => setDetail(null)}
+            onEdit={() => { setDetail(null); setTimeout(() => openEdit(l), 250); }}
+            onDelete={() => { setDetail(null); setTimeout(() => handleDelete(l.id), 250); }}
+          />
+        );
+      })()}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   headerWrap: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
   iconBtn: {
@@ -292,18 +362,25 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   addBtn: { width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
+  listHeader: { gap: Spacing.md, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  miniBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  body: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg, marginTop: Spacing.md },
+  figures: { flex: 1, flexShrink: 1, gap: 2 },
+  bigValue: { color: Colors.red, fontSize: FontSize.xxl, fontWeight: '800', letterSpacing: -0.3 },
+  emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800' },
+  emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
   card: { gap: 4 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  actionsRow: { flexDirection: 'row', gap: Spacing.sm, paddingTop: 2 },
+  actionsRow: { flexDirection: 'row', gap: 0 },
   name: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },
-  metaRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm, flexWrap: 'wrap' },
   metaText: { color: Colors.text2, fontSize: FontSize.sm },
-  valuesRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
-  valueCol: { flex: 1 },
+  valuesRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md, gap: Spacing.sm },
+  valueCol: { flex: 1, flexShrink: 1 },
   valueLabel: { fontSize: FontSize.xs, color: Colors.text2, marginBottom: 2 },
   valueAmt: { fontSize: FontSize.base, fontWeight: '700' },
-  pctText: { fontSize: FontSize.xs, color: Colors.text2, marginTop: 4 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
   typeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md,
@@ -313,4 +390,4 @@ const styles = StyleSheet.create({
   swatchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg, flexWrap: 'wrap' },
   swatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: 'transparent' },
   swatchActive: { borderColor: Colors.text1 },
-});
+}));

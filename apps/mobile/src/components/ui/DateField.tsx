@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, Platform, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CalendarDays } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing } from '../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, createStyles } from '../../constants/theme';
 
 // value/onChange use 'YYYY-MM-DD' strings — same format the reducer/exports expect.
 export default function DateField({
@@ -44,15 +45,15 @@ export default function DateField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   group: { marginBottom: Spacing.lg },
   label: { fontSize: FontSize.base, fontWeight: '500', color: Colors.text2, marginBottom: 6 },
   input: {
     paddingVertical: 12, paddingHorizontal: 14, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.inset,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   value: { fontSize: FontSize.md, color: Colors.text1 },
   doneBtn: { alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 14 },
   doneText: { color: Colors.accentLight, fontWeight: '600', fontSize: FontSize.md },
-});
+}));

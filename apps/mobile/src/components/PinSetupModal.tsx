@@ -3,7 +3,7 @@ import { Modal, View, Pressable, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import PinPad from './PinPad';
 import { setPin as savePin } from '../utils/appLock';
-import { Colors, Spacing } from '../constants/theme';
+import { Colors, Spacing, createStyles } from '../constants/theme';
 
 // Two-step create/change PIN flow: enter a new PIN, then confirm it matches
 // before saving. Used both for first-time setup and "Change PIN" in Settings.
@@ -49,8 +49,8 @@ export default function PinSetupModal({ onClose, onSaved }: { onClose: () => voi
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   bg: { flex: 1, backgroundColor: Colors.bgPrimary, paddingTop: 56 },
   closeBtn: { position: 'absolute', top: 56, right: Spacing.lg, zIndex: 1, padding: 6 },
   padWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-});
+}));

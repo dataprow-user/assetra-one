@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import { CloudUpload } from 'lucide-react-native';
 import { getDriveAuth, useGoogleDriveConnect } from '../../utils/googleDriveSync';
-import { Colors, Radius, FontSize, Spacing } from '../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, createStyles } from '../../constants/theme';
 
 // Mirrors web App.jsx's DriveConnectBanner — shown on Home until Drive is
 // connected. "Not Now" only dismisses for this app session (plain component
@@ -56,9 +57,9 @@ export default function DriveConnectBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   banner: {
-    backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)',
+    backgroundColor: 'rgba(79,70,229,0.12)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.3)',
     borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.md, gap: Spacing.sm,
   },
   row: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-start' },
@@ -70,4 +71,4 @@ const styles = StyleSheet.create({
   primaryText: { color: '#fff', fontWeight: '600', fontSize: FontSize.sm },
   ghostBtn: { paddingVertical: 10, paddingHorizontal: Spacing.md, borderRadius: Radius.sm, backgroundColor: Colors.panel },
   ghostText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
-});
+}));

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Modal, FlatList, StyleSheet } from 'react-native';
+import { View, Pressable, Modal, FlatList, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import { ChevronDown, X, Check } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Shadow } from '../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Shadow, createStyles } from '../../constants/theme';
 
 export type SelectOption = { label: string; value: string };
 
@@ -69,14 +70,14 @@ export default function SelectField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   group: { marginBottom: Spacing.lg },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   label: { fontSize: FontSize.base, fontWeight: '500', color: Colors.text2 },
   hint: { fontSize: FontSize.sm, color: Colors.text3 },
   input: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 14, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.inset,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   inputInvalid: { borderColor: Colors.red },
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
   error: { marginTop: 5, color: Colors.red, fontSize: FontSize.sm },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: Spacing.lg },
   sheet: {
-    backgroundColor: '#141824', borderRadius: Radius.lg, maxHeight: '80%',
+    backgroundColor: Colors.modalBg, borderRadius: Radius.lg, maxHeight: '80%',
     borderWidth: 1, borderColor: Colors.borderStrong, paddingBottom: Spacing.sm, overflow: 'hidden', ...Shadow.xl,
   },
   sheetHeader: {
@@ -101,4 +102,4 @@ const styles = StyleSheet.create({
   optionText: { fontSize: FontSize.md, color: Colors.text1 },
   optionTextActive: { color: Colors.accentLight, fontWeight: '600' },
   emptyText: { padding: Spacing.lg, color: Colors.text2, textAlign: 'center' },
-});
+}));

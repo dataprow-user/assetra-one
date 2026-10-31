@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { Text, TextInput } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers, Check } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
-import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, ScreenHeader } from '../../components/ui';
-import { Colors, FontSize, Spacing, Radius, GroupColors } from '../../constants/theme';
+import { Card, Button, AppModal, FormField, SelectField, ScreenHeader, FilterChips } from '../../components/ui';
+import { Colors, FontSize, Spacing, Radius, GroupColors, createStyles } from '../../constants/theme';
 import { MAX_NAME_LENGTH } from '../../utils/validation';
 import { DEFAULT_GROUPS } from '../../data/categories';
 
@@ -115,8 +116,8 @@ export default function CategoryManager() {
   }
 
   const TABS: { key: Tab; label: string; count: number }[] = [
-    { key: 'expense', label: 'Expense Categories', count: expenseCategories.length },
-    { key: 'income', label: 'Income Categories', count: incomeCategories.length },
+    { key: 'expense', label: 'Expense', count: expenseCategories.length },
+    { key: 'income', label: 'Income', count: incomeCategories.length },
     { key: 'group', label: 'Groups', count: groups.length },
   ];
 
@@ -138,14 +139,11 @@ export default function CategoryManager() {
         />
 
         <View style={styles.tabsRow}>
-          {TABS.map((t) => (
-            <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
-              <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
-              <View style={[styles.countBadge, tab === t.key && styles.countBadgeActive]}>
-                <Text style={[styles.countText, tab === t.key && styles.countTextActive]}>{t.count}</Text>
-              </View>
-            </Pressable>
-          ))}
+          <FilterChips<Tab>
+            value={tab}
+            onChange={setTab}
+            options={TABS.map((t) => ({ key: t.key, label: t.label, count: t.count }))}
+          />
         </View>
       </View>
 
@@ -153,14 +151,17 @@ export default function CategoryManager() {
         {tab !== 'group' && Object.entries(byGroup).map(([group, cats]) => (
           <Card key={group} style={styles.groupBlock}>
             <View style={styles.groupHeader}>
-              <Badge label={group} color={GroupColors[group] || Colors.text2} />
-              <Text style={styles.groupCount}>{cats.length} categories</Text>
+              <View style={styles.groupTitleRow}>
+                <View style={[styles.groupDot, { backgroundColor: GroupColors[group] || Colors.text2 }]} />
+                <Text style={styles.groupTitle} numberOfLines={1}>{group}</Text>
+              </View>
+              <Text style={styles.groupCount}>{cats.length} {cats.length === 1 ? 'category' : 'categories'}</Text>
             </View>
 
             {cats.map((cat: any) => (
               <View key={cat.id} style={styles.catRow}>
                 <View style={styles.catRowHeader}>
-                  <Pressable style={styles.catRowLeft} onPress={() => toggle(cat.id)} hitSlop={4}>
+                  <Pressable style={styles.catRowLeft} onPress={() => toggle(cat.id)} accessibilityRole="button" accessibilityLabel={`${cat.name}, ${cat.subcategories.length} sub-categories. Tap to ${expanded[cat.id] ? 'collapse' : 'expand'}`}>
                     {expanded[cat.id] ? <ChevronDown size={15} color={Colors.text2} /> : <ChevronRight size={15} color={Colors.text2} />}
                     <Tag size={15} color={GroupColors[group] || Colors.accentLight} />
                     <Text style={styles.catName} numberOfLines={1}>{cat.name}</Text>
@@ -169,8 +170,8 @@ export default function CategoryManager() {
                     </View>
                   </Pressable>
                   <View style={styles.catRowActions}>
-                    <Pressable onPress={() => openEditCat(cat)} hitSlop={8}><Edit2 size={14} color={Colors.text2} /></Pressable>
-                    <Pressable onPress={() => handleDeleteCat(cat.id)} hitSlop={8}><Trash2 size={14} color={Colors.red} /></Pressable>
+                    <Pressable onPress={() => openEditCat(cat)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
+                    <Pressable onPress={() => handleDeleteCat(cat.id)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Delete ${cat.name}`}><Trash2 size={16} color={Colors.red} /></Pressable>
                   </View>
                 </View>
 
@@ -190,11 +191,11 @@ export default function CategoryManager() {
                                 autoFocus
                                 onSubmitEditing={() => handleUpdateSub(cat, sub)}
                               />
-                              <Pressable onPress={() => handleUpdateSub(cat, sub)} hitSlop={8}>
-                                <Check size={14} color={Colors.green} />
+                              <Pressable onPress={() => handleUpdateSub(cat, sub)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Save sub-category">
+                                <Check size={16} color={Colors.green} />
                               </Pressable>
-                              <Pressable onPress={() => setEditingSub(null)} hitSlop={8}>
-                                <X size={14} color={Colors.text2} />
+                              <Pressable onPress={() => setEditingSub(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cancel editing">
+                                <X size={16} color={Colors.text2} />
                               </Pressable>
                             </View>
                           );
@@ -202,11 +203,11 @@ export default function CategoryManager() {
                         return (
                           <View key={sub} style={styles.subChip}>
                             <Text style={styles.subChipText}>{sub}</Text>
-                            <Pressable onPress={() => startEditSub(cat, sub)} hitSlop={8}>
-                              <Edit2 size={12} color={Colors.accentLight} />
+                            <Pressable onPress={() => startEditSub(cat, sub)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Rename ${sub}`}>
+                              <Edit2 size={14} color={Colors.accentLight} />
                             </Pressable>
-                            <Pressable onPress={() => handleDeleteSub(cat, sub)} hitSlop={8}>
-                              <X size={12} color={Colors.red} />
+                            <Pressable onPress={() => handleDeleteSub(cat, sub)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${sub}`}>
+                              <X size={14} color={Colors.red} />
                             </Pressable>
                           </View>
                         );
@@ -226,7 +227,7 @@ export default function CategoryManager() {
                         onChangeText={(v) => { setNewSubInput((s) => ({ ...s, [cat.id]: v })); setSubError((s) => ({ ...s, [cat.id]: '' })); }}
                         onSubmitEditing={() => handleAddSub(cat)}
                       />
-                      <Pressable style={styles.addSubBtn} onPress={() => handleAddSub(cat)}>
+                      <Pressable style={styles.addSubBtn} onPress={() => handleAddSub(cat)} accessibilityRole="button" accessibilityLabel={`Add sub-category to ${cat.name}`}>
                         <Plus size={14} color={Colors.accentLight} />
                         <Text style={styles.addSubBtnText}>Add</Text>
                       </Pressable>
@@ -239,7 +240,12 @@ export default function CategoryManager() {
         ))}
 
         {tab !== 'group' && categories.length === 0 && (
-          <EmptyState icon={Tag} title="No Categories" description={'Tap "Add Category" to create your first category.'} />
+          <Card style={styles.emptyCard}>
+            <View style={[styles.emptyIcon, { backgroundColor: Colors.blueBg }]}><Tag size={26} color={Colors.blue} /></View>
+            <Text style={styles.emptyTitle}>No {tab} categories yet</Text>
+            <Text style={styles.emptyText}>Categories help you see where your money comes from and goes.</Text>
+            <Button title="Add category" icon={<Plus size={16} color="#fff" />} onPress={openAddCat} />
+          </Card>
         )}
 
         {tab === 'group' && (
@@ -247,16 +253,23 @@ export default function CategoryManager() {
             {groups.map((g: any, i: number) => (
               <View key={g.id} style={[styles.groupRow, i < groups.length - 1 && styles.groupRowBorder]}>
                 <View style={styles.groupRowLeft}>
-                  <Layers size={18} color={GroupColors[g.name] || Colors.accentLight} />
-                  <Text style={styles.groupRowName}>{g.name}</Text>
+                  <View style={[styles.groupIcon, { backgroundColor: (GroupColors[g.name] || Colors.accentLight) + '1f' }]}>
+                    <Layers size={18} color={GroupColors[g.name] || Colors.accentLight} />
+                  </View>
+                  <Text style={styles.groupRowName} numberOfLines={1}>{g.name}</Text>
                 </View>
                 <View style={styles.catRowActions}>
-                  <Pressable onPress={() => openEditGroup(g)} hitSlop={8}><Edit2 size={14} color={Colors.text2} /></Pressable>
-                  <Pressable onPress={() => handleDeleteGroup(g.id)} hitSlop={8}><Trash2 size={14} color={Colors.red} /></Pressable>
+                  <Pressable onPress={() => openEditGroup(g)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Edit group ${g.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
+                  <Pressable onPress={() => handleDeleteGroup(g.id)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Delete group ${g.name}`}><Trash2 size={16} color={Colors.red} /></Pressable>
                 </View>
               </View>
             ))}
-            {groups.length === 0 && <Text style={styles.emptySubText}>No groups found</Text>}
+            {groups.length === 0 && (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No groups yet</Text>
+                <Button title="Add group" icon={<Plus size={16} color="#fff" />} onPress={openAddGroup} />
+              </View>
+            )}
           </Card>
         )}
       </ScrollView>
@@ -300,56 +313,54 @@ export default function CategoryManager() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   headerWrap: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
-  tabsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
-  tab: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.panel,
-  },
-  tabActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
-  tabText: { color: Colors.text2, fontWeight: '500', fontSize: FontSize.sm },
-  tabTextActive: { color: Colors.accentLight },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 7, borderRadius: Radius.pill, backgroundColor: Colors.panelHover },
-  countBadgeActive: { backgroundColor: 'rgba(99,102,241,0.25)' },
-  countText: { color: Colors.text2, fontSize: FontSize.xs, fontWeight: '700' },
-  countTextActive: { color: Colors.accentLight },
+  tabsRow: { marginBottom: Spacing.md },
   content: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
   groupBlock: { gap: Spacing.sm },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, marginBottom: 2 },
+  groupTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexShrink: 1 },
+  groupDot: { width: 12, height: 12, borderRadius: 6 },
+  groupTitle: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md, flexShrink: 1 },
+  groupIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  iconAction: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panelHover },
+  emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800', textAlign: 'center' },
+  emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
   groupCount: { fontSize: FontSize.sm, color: Colors.text2 },
   catRow: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.sm },
-  catRowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  catRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
-  catName: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base, flexShrink: 1 },
+  catRowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, minHeight: 48 },
+  catRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1, minHeight: 48 },
+  catName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base, flexShrink: 1 },
   subCountBadge: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: Radius.pill, backgroundColor: Colors.panelHover },
   subCountText: { color: Colors.text2, fontSize: FontSize.xs, fontWeight: '600' },
-  catRowActions: { flexDirection: 'row', gap: Spacing.sm },
+  catRowActions: { flexDirection: 'row', gap: Spacing.xs },
   subPanel: { marginTop: Spacing.sm, marginLeft: Spacing.lg, gap: Spacing.sm, paddingBottom: Spacing.xs },
   subChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   subChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 10,
-    borderRadius: Radius.pill, backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.25)',
+    borderRadius: Radius.pill, backgroundColor: 'rgba(79,70,229,0.12)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.25)',
   },
   subChipText: { color: Colors.accentLight, fontSize: FontSize.sm, fontWeight: '500' },
   subChipEditing: { backgroundColor: Colors.panel, borderColor: Colors.borderStrong, paddingVertical: 4 },
   subEditInput: {
     minWidth: 80, paddingVertical: 2, paddingHorizontal: 6, borderRadius: Radius.sm, fontSize: FontSize.sm,
-    borderWidth: 1, borderColor: Colors.accentLight, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1,
+    borderWidth: 1, borderColor: Colors.accentLight, backgroundColor: Colors.inset, color: Colors.text1,
   },
   fieldError: { color: Colors.red, fontSize: FontSize.sm },
   emptySubText: { fontSize: FontSize.sm, color: Colors.text3, fontStyle: 'italic' },
   addSubRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   addSubInput: {
-    flex: 1, paddingVertical: 9, paddingHorizontal: 12, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1, fontSize: FontSize.base,
+    flex: 1, minHeight: 44, paddingVertical: 9, paddingHorizontal: 12, borderRadius: Radius.sm,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.inset, color: Colors.text1, fontSize: FontSize.base,
   },
-  addSubBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 9, paddingHorizontal: 12 },
+  addSubBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12 },
   addSubBtnText: { color: Colors.accentLight, fontWeight: '600', fontSize: FontSize.base },
-  groupRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
+  groupRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, paddingVertical: Spacing.sm, minHeight: 56 },
   groupRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  groupRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  groupRowName: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base },
+  groupRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
+  groupRowName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base, flexShrink: 1 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-});
+}));

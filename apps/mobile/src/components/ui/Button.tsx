@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { Pressable, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { Text } from './AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Radius, Spacing, FontSize } from '../../constants/theme';
+import { Colors, Radius, Spacing, FontSize, createStyles } from '../../constants/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'md' | 'sm';
@@ -65,7 +66,7 @@ export default function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   base: { borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
   baseMd: { paddingVertical: 13, paddingHorizontal: Spacing.xl },
   baseSm: { paddingVertical: 8, paddingHorizontal: Spacing.md },
@@ -75,4 +76,4 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: Colors.panelHover, borderWidth: 1, borderColor: Colors.borderStrong },
   ghost: { backgroundColor: 'transparent' },
   dangerOutline: { backgroundColor: Colors.redBg, borderWidth: 1, borderColor: 'rgba(244,63,94,0.3)' },
-});
+}));

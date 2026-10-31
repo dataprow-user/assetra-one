@@ -1,48 +1,63 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, FlatList, Pressable, Alert } from 'react-native';
+import { Text } from '../../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react-native';
+import { Wallet, CreditCard, Banknote, Plus, Edit2, Trash2, Eye, EyeOff, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../../context/AppContext';
-import { Card, Button, EmptyState, AppModal, FormField, SelectField, IconBadge, DateField } from '../../../components/ui';
+import { Card, Button, AppModal, FormField, SelectField, IconBadge, DateField, PageHero, FilterChips, Tap } from '../../../components/ui';
+import AuroraWash from '../../../components/ui/AuroraWash';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
-import { Colors, FontSize, Spacing, Radius } from '../../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../../../constants/theme';
 import { MAX_NAME_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../../utils/validation';
 
 const ACCOUNT_TYPES = ['bank', 'wallet', 'credit_card', 'demat', 'cash'];
 const TYPE_ICONS: Record<string, any> = { bank: Wallet, wallet: Wallet, credit_card: CreditCard, demat: Banknote, cash: Banknote };
-const TYPE_COLORS: Record<string, string> = { bank: Colors.green, wallet: Colors.blue, credit_card: Colors.red, demat: Colors.accentLight, cash: Colors.yellow };
+const TYPE_COLORS: Record<string, string> = { get bank() { return Colors.green; }, get wallet() { return Colors.blue; }, get credit_card() { return Colors.red; }, get demat() { return Colors.accentLight; }, get cash() { return Colors.yellow; } };
+const TYPE_LABELS: Record<string, string> = { bank: 'Bank', wallet: 'Wallet', credit_card: 'Credit card', demat: 'Demat', cash: 'Cash' };
 const CURRENCIES = ['INR', 'USD', 'EUR'];
 
 const emptyForm = () => ({ name: '', type: 'bank', balance: '', currency: 'INR' });
+const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+type Period = 'all' | '30d' | 'month' | 'custom';
 
 export default function Accounts() {
-  const { state, dispatch, uid, fmt, fmtSigned, fmtN, amountsHidden, toggleAmounts } = useApp();
+  const { state, dispatch, uid, fmt, fmtSigned, amountsHidden, toggleAmounts } = useApp();
   const { accounts = [], transactions = [] } = state;
   const router = useRouter();
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState(emptyForm());
   const { errors, validate, reset: resetErrors } = useFieldErrors();
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const totalBalance = accounts.reduce((s: number, a: any) => s + a.balance, 0);
+  const positive = accounts.filter((a: any) => a.balance > 0).reduce((s: number, a: any) => s + a.balance, 0);
+  const owed = accounts.filter((a: any) => a.balance < 0).reduce((s: number, a: any) => s + -a.balance, 0);
 
   // Balances themselves are always current (a point-in-time number can't be
-  // "for a range"); the range instead filters the per-account In/Out shown
-  // below, so you can see cash flow for a period without opening each account.
+  // "for a range"); the period instead filters the per-account In/Out shown
+  // on each card, so you can see cash flow for a window without opening each account.
   const now = new Date();
-  const todayISO = now.toISOString().split('T')[0];
-  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const [rangeMode, setRangeMode] = useState<'all' | 'custom'>('all');
-  const [customFrom, setCustomFrom] = useState(monthStartISO);
-  const [customTo, setCustomTo] = useState(todayISO);
+  const [period, setPeriod] = useState<Period>('all');
+  const [customFrom, setCustomFrom] = useState(localISO(new Date(now.getFullYear(), now.getMonth(), 1)));
+  const [customTo, setCustomTo] = useState(localISO(now));
+  const { from, to, periodLabel } = useMemo(() => {
+    const t = new Date();
+    if (period === '30d') return { from: localISO(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 29)), to: localISO(t), periodLabel: 'last 30 days' };
+    if (period === 'month') return { from: localISO(new Date(t.getFullYear(), t.getMonth(), 1)), to: localISO(t), periodLabel: 'this month' };
+    if (period === 'custom') return { from: customFrom, to: customTo, periodLabel: 'selected range' };
+    return { from: '', to: '9999-12-31', periodLabel: 'all time' };
+  }, [period, customFrom, customTo]);
+  const dateFilteredTxns = transactions.filter((t: any) => { const d = String(t.date).slice(0, 10); return d >= from && d <= to; });
 
-  const dateFilteredTxns = rangeMode !== 'custom' ? transactions : transactions.filter((t: any) => {
-    const d = new Date(t.date);
-    const start = new Date(customFrom);
-    const endRaw = new Date(customTo);
-    const end = new Date(endRaw.getFullYear(), endRaw.getMonth(), endRaw.getDate(), 23, 59, 59, 999);
-    return d >= start && d <= end;
-  });
+  const typeCounts = useMemo(() => {
+    const c: Record<string, number> = { all: accounts.length };
+    accounts.forEach((a: any) => { c[a.type] = (c[a.type] || 0) + 1; });
+    return c;
+  }, [accounts]);
+  const visible = accounts.filter((a: any) => typeFilter === 'all' || a.type === typeFilter);
+  const typeOptions = [{ key: 'all', label: 'All', count: accounts.length }, ...ACCOUNT_TYPES.filter((t) => typeCounts[t]).map((t) => ({ key: t, label: TYPE_LABELS[t], count: typeCounts[t], color: TYPE_COLORS[t] }))];
 
   const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
   const openEdit = (a: any) => { setForm({ ...a, balance: String(a.balance) }); resetErrors(); setModal({ mode: 'edit', data: a }); };
@@ -71,43 +86,65 @@ export default function Accounts() {
     ]);
   };
 
+  const header = (
+    <View style={{ gap: Spacing.md, marginBottom: Spacing.sm }}>
+      {accounts.length > 0 ? (
+        <PageHero
+          label="Total balance"
+          value={fmtSigned(totalBalance)}
+          sub={`Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}`}
+          stats={[
+            { label: 'Accounts', value: String(accounts.length) },
+            { label: 'Available', value: fmt(positive) },
+            { label: 'Owed', value: fmt(owed) },
+          ]}
+        />
+      ) : null}
+      {accounts.length > 0 ? <FilterChips value={typeFilter} onChange={setTypeFilter} options={typeOptions} /> : null}
+      {accounts.length > 0 ? (
+        <>
+          <Text style={styles.flowLabel}>Cash flow shown for</Text>
+          <FilterChips<Period> value={period} onChange={setPeriod}
+            options={[{ key: 'all', label: 'All time' }, { key: '30d', label: '30 days' }, { key: 'month', label: 'This month' }, { key: 'custom', label: 'Custom' }]} />
+        </>
+      ) : null}
+      {period === 'custom' && accounts.length > 0 && (
+        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+          <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
+          <DateField label="To" value={customTo} onChange={setCustomTo} maximumDate={new Date()} style={{ flex: 1 }} />
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+      <AuroraWash />
+      <View style={styles.topBar}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Accounts</Text>
-          <Text style={styles.subtitle}>
-            {accounts.length} accounts • Total: <Text style={{ color: totalBalance >= 0 ? Colors.green : Colors.red }}>{fmtSigned(totalBalance)}</Text>
-          </Text>
+          <Text style={styles.title} accessibilityRole="header">Accounts</Text>
+          <Text style={styles.subtitle}>Banks, cards, wallets & more</Text>
         </View>
-        <Pressable onPress={toggleAmounts} hitSlop={10} style={styles.eyeBtn}>
+        <Pressable onPress={toggleAmounts} hitSlop={6} style={styles.eyeBtn} accessibilityRole="button" accessibilityLabel={amountsHidden ? 'Show amounts' : 'Hide amounts'}>
           {amountsHidden ? <EyeOff size={20} color={Colors.text2} /> : <Eye size={20} color={Colors.accentLight} />}
         </Pressable>
         <Button title="Add" icon={<Plus size={16} color="#fff" />} size="sm" onPress={openAdd} />
       </View>
 
-      <View style={styles.periodRow}>
-        <Pressable onPress={() => setRangeMode('all')} style={[styles.periodPill, rangeMode === 'all' && styles.periodPillActive]}>
-          <Text style={[styles.periodPillText, rangeMode === 'all' && styles.periodPillTextActive]}>All Time</Text>
-        </Pressable>
-        <Pressable onPress={() => setRangeMode('custom')} style={[styles.periodPill, rangeMode === 'custom' && styles.periodPillActive]}>
-          <Text style={[styles.periodPillText, rangeMode === 'custom' && styles.periodPillTextActive]}>Custom Range</Text>
-        </Pressable>
-      </View>
-      {rangeMode === 'custom' && (
-        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.md }}>
-          <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
-          <DateField label="To" value={customTo} onChange={setCustomTo} maximumDate={new Date()} style={{ flex: 1 }} />
-        </View>
-      )}
-
-      <FlatList extraData={[fmt, rangeMode, customFrom, customTo]}
-        data={accounts}
+      <FlatList
+        extraData={[fmt, period, typeFilter, customFrom, customTo]}
+        data={visible}
         keyExtractor={(a) => a.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: Spacing.sm }}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<EmptyState icon={Wallet} title="No Accounts" description="Add your bank accounts, credit cards, and wallets" />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <Card style={styles.emptyCard}>
+            <View style={styles.emptyIcon}><Wallet size={28} color={Colors.accentLight} /></View>
+            <Text style={styles.emptyTitle}>{accounts.length === 0 ? 'Add your first account' : 'No accounts of this type'}</Text>
+            <Text style={styles.emptyText}>{accounts.length === 0 ? 'Bank accounts, credit cards, wallets and cash — add them so every transaction tracks a real balance.' : 'Try another filter.'}</Text>
+            <Button title={accounts.length === 0 ? 'Add account' : 'Show all'} onPress={accounts.length === 0 ? openAdd : () => setTypeFilter('all')} />
+          </Card>
+        }
         renderItem={({ item: a }) => {
           const Icon = TYPE_ICONS[a.type] || Wallet;
           const color = TYPE_COLORS[a.type] || Colors.accentLight;
@@ -119,23 +156,29 @@ export default function Accounts() {
             .filter((t: any) => t.type === 'expense' || (t.type === 'transfer' && t.account === a.id))
             .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
           return (
-            <Card style={styles.accountCard}>
-              <View style={styles.accountTop}>
-                <IconBadge icon={Icon} color={color} />
-                <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-                  <Pressable onPress={() => openEdit(a)} hitSlop={8}><Edit2 size={15} color={Colors.text2} /></Pressable>
-                  <Pressable onPress={() => handleDelete(a.id)} hitSlop={8}><Trash2 size={15} color={Colors.red} /></Pressable>
+            <Tap onPress={() => router.push({ pathname: '/(app)/account-detail', params: { id: a.id } } as any)}
+              accessibilityLabel={`${a.name}, ${TYPE_LABELS[a.type] || a.type}, balance ${fmtSigned(a.balance)}. Tap to see transactions`}>
+              <Card style={styles.accountCard}>
+                <View style={styles.accountTop}>
+                  <IconBadge icon={Icon} color={color} size={46} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
+                    <Text style={[styles.accountType, { color }]}>{TYPE_LABELS[a.type] || a.type} • {a.currency}</Text>
+                  </View>
+                  <View style={styles.actions}>
+                    <Pressable onPress={() => openEdit(a)} hitSlop={6} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Edit ${a.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
+                    <Pressable onPress={() => handleDelete(a.id)} hitSlop={6} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Delete ${a.name}`}><Trash2 size={16} color={Colors.red} /></Pressable>
+                  </View>
                 </View>
-              </View>
-              <Pressable onPress={() => router.push({ pathname: '/(app)/account-detail', params: { id: a.id } } as any)}>
-                <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
-                <Text style={[styles.accountType, { color }]}>{a.type.replace('_', ' ')}</Text>
-                <Text style={[styles.accountBalance, { color: a.balance < 0 ? Colors.red : Colors.green }]}>{fmtSigned(a.balance)}</Text>
-                <Text style={styles.accountMeta}>
-                  <Text style={{ color: Colors.green }}>+{fmt(periodIn)}</Text> · <Text style={{ color: Colors.red }}>-{fmt(periodOut)}</Text> • {a.currency}
-                </Text>
-              </Pressable>
-            </Card>
+                <Text style={[styles.accountBalance, { color: a.balance < 0 ? Colors.red : Colors.text1 }]} numberOfLines={1} adjustsFontSizeToFit>{fmtSigned(a.balance)}</Text>
+                <View style={styles.flowRow}>
+                  <View style={[styles.flowPill, { backgroundColor: Colors.greenBg }]}><Text style={[styles.flowText, { color: Colors.green }]}>↓ {fmt(periodIn)}</Text></View>
+                  <View style={[styles.flowPill, { backgroundColor: Colors.redBg }]}><Text style={[styles.flowText, { color: Colors.red }]}>↑ {fmt(periodOut)}</Text></View>
+                  <Text style={styles.flowWhen} numberOfLines={1}>{periodLabel}</Text>
+                  <ChevronRight size={16} color={Colors.text3} />
+                </View>
+              </Card>
+            </Tap>
           );
         }}
       />
@@ -146,7 +189,7 @@ export default function Accounts() {
           title={modal.mode === 'add' ? 'Add Account' : 'Edit Account'}
           onClose={() => setModal(null)}
           footer={
-            <View style={styles.actions}>
+            <View style={styles.modalActions}>
               <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
               <Button title={modal.mode === 'add' ? 'Add Account' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
             </View>
@@ -164,23 +207,28 @@ export default function Accounts() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, gap: Spacing.md },
-  periodRow: { flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
-  periodPill: { flex: 1, paddingVertical: 8, borderRadius: Radius.sm, alignItems: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
-  periodPillActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
-  periodPillText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
-  periodPillTextActive: { color: Colors.accentLight },
-  eyeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
-  title: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text1 },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
+  eyeBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
+  title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text1 },
   subtitle: { fontSize: FontSize.base, color: Colors.text2, marginTop: 2 },
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
-  accountCard: { flex: 1, gap: 4 },
-  accountTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.sm },
-  accountName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },
-  accountType: { fontSize: FontSize.sm, fontWeight: '600', textTransform: 'capitalize', marginBottom: 6 },
-  accountBalance: { fontSize: FontSize.lg, fontWeight: '700' },
-  accountMeta: { fontSize: FontSize.sm, color: Colors.text2, marginTop: 4 },
-  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-});
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 120, gap: Spacing.md },
+  flowLabel: { color: Colors.text3, fontSize: FontSize.xs, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: -4 },
+  accountCard: { gap: Spacing.md },
+  accountTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  accountName: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  accountType: { fontSize: FontSize.sm, fontWeight: '700', marginTop: 1 },
+  accountBalance: { fontSize: FontSize.xxl, fontWeight: '800', letterSpacing: -0.3 },
+  actions: { flexDirection: 'row', gap: Spacing.sm },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.panelHover, alignItems: 'center', justifyContent: 'center' },
+  flowRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  flowPill: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: Radius.pill },
+  flowText: { fontSize: FontSize.sm, fontWeight: '800' },
+  flowWhen: { flex: 1, color: Colors.text2, fontSize: FontSize.sm },
+  emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xxl },
+  emptyIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.accentGlow, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800' },
+  emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
+  modalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
+}));

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from './ui/AppText';
 import { Wallet } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { AppModal, FormField, SelectField, DateField, Button } from './ui';
-import { Colors, FontSize, Spacing, Radius } from '../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../constants/theme';
 import { getNumberError, sanitizeNumericInput, MAX_NOTES_LENGTH, MAX_AMOUNT } from '../utils/validation';
 
 const emptyForm = () => ({
@@ -196,7 +197,7 @@ export default function TransactionFormModal({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   dateFieldError: { marginBottom: 4 },
   fieldError: { color: Colors.red, fontSize: FontSize.sm, marginTop: -10, marginBottom: Spacing.lg },
   groupHint: { fontSize: FontSize.sm, color: Colors.text2, marginTop: -10, marginBottom: Spacing.lg },
@@ -204,10 +205,10 @@ const styles = StyleSheet.create({
   balanceHint: {
     flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap',
     marginTop: -8, marginBottom: Spacing.lg, padding: 10, borderRadius: Radius.sm,
-    backgroundColor: 'rgba(99,102,241,0.08)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)',
+    backgroundColor: 'rgba(79,70,229,0.08)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.2)',
   },
   balanceHintText: { fontSize: FontSize.sm, color: Colors.text2 },
   balanceHintStrong: { color: Colors.text1, fontWeight: '700' },
   balanceHintArrow: { color: Colors.text3 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-});
+}));

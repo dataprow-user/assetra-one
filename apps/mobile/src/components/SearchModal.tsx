@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, Platform } from 'react-native';
+import { Modal, View, Pressable, FlatList, StyleSheet, Platform } from 'react-native';
+import { Text, TextInput } from './ui/AppText';
 import { useRouter } from 'expo-router';
 import { Search, X, List, Wallet, TrendingUp, CreditCard, PieChart, CalendarDays, Shield, Tags } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
-import { Colors, Radius, FontSize, Spacing, Shadow } from '../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Shadow, createStyles } from '../constants/theme';
 
 // Mirrors web Header.jsx's searchAppData — same entity types, same fields.
 function searchAppData(state: any, rawQuery: string) {
@@ -99,10 +100,10 @@ export default function SearchModal({ visible, onClose }: { visible: boolean; on
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: Spacing.lg },
   box: {
-    backgroundColor: '#141824', borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.borderStrong,
+    backgroundColor: Colors.modalBg, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.borderStrong,
     ...Shadow.xl, overflow: 'hidden',
   },
   searchRow: {
@@ -118,4 +119,4 @@ const styles = StyleSheet.create({
   resultLabel: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.base },
   resultSub: { color: Colors.text2, fontSize: FontSize.sm, marginTop: 1 },
   resultType: { color: Colors.text3, fontSize: FontSize.xs, fontWeight: '600' },
-});
+}));

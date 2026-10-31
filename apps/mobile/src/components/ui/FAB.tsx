@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Shadow } from '../../constants/theme';
+import { Colors, Shadow, createStyles } from '../../constants/theme';
 
 // Mirrors the web app's AddTransactionFAB — a single, unmistakable circular
 // "+" that is the one consistent way to add a transaction from any screen.
@@ -21,7 +21,7 @@ export default function FAB({ onPress, raised = false }: { onPress: () => void; 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   wrap: { position: 'absolute', right: 20, ...Shadow.glow },
   fab: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-});
+}));

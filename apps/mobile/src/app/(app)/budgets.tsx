@@ -1,12 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { Text, TextInput } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PieChart, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, LayoutGrid, Table2 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { PieChart, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, LayoutGrid, Table2, Target } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
-import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge } from '../../components/ui';
+import { Card, Button, AppModal, FormField, SelectField, ScreenHeader, PageHero, FilterChips, Tap } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
-import { Colors, FontSize, Spacing, Radius, GroupColors } from '../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, GroupColors, createStyles } from '../../constants/theme';
 import { MAX_NOTES_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
+import { parseYMD } from '../../utils/budgetPeriod';
 
 // Ported from apps/web/src/pages/Budgets.jsx — card view + single Add/Edit
 // modal, PLUS the "Bulk Entry" mode: pick a group, fill in every category's
@@ -28,7 +31,8 @@ const NUMERIC_RULES: Record<string, any> = {
 
 export default function Budgets() {
   const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
-  const { budgets = [], expenseCategories = [] } = state;
+  const { budgets = [], expenseCategories = [], transactions = [] } = state;
+  const router = useRouter();
 
   // Month / Year navigation
   const now = new Date();
@@ -106,6 +110,31 @@ export default function Budgets() {
   });
 
   const totalPlanned = viewBudgets.reduce((s: number, b: any) => s + Number(b.plannedAmount || 0), 0);
+  const categoryCount = new Set(viewBudgets.map((b: any) => b.category)).size;
+
+  // Spent in the selected period (expense transactions), for the hero.
+  const totalSpent = useMemo(() => transactions.reduce((s: number, t: any) => {
+    if (t.type !== 'expense') return s;
+    const ymd = parseYMD(t.date);
+    if (ymd.year !== viewYear || (viewMode === 'month' && ymd.month !== viewMonth)) return s;
+    return s + Number(t.amount || 0);
+  }, 0), [transactions, viewMonth, viewYear, viewMode]);
+  const remaining = totalPlanned - totalSpent;
+  const usedPct = totalPlanned > 0 ? Math.round((totalSpent / totalPlanned) * 100) : 0;
+
+  const openDetail = (category?: string) => router.push({
+    pathname: '/(app)/budget-vs-spent' as any,
+    params: { month: String(viewMonth), year: String(viewYear), ...(category ? { category } : {}) },
+  });
+
+  const [groupFilter, setGroupFilter] = useState('All');
+  const groupNames = Object.keys(byGroup);
+  const activeGroup = groupFilter !== 'All' && byGroup[groupFilter] ? groupFilter : 'All';
+  const groupChips = [
+    { key: 'All', label: 'All', count: viewBudgets.length },
+    ...groupNames.map((g) => ({ key: g, label: g, count: byGroup[g].length, color: GroupColors[g] || Colors.text2 })),
+  ];
+  const visibleGroups = Object.entries(byGroup).filter(([g]) => activeGroup === 'All' || g === activeGroup);
 
   // ── Bulk Entry mode ──
   const [entryMode, setEntryMode] = useState<'cards' | 'bulk'>('cards');
@@ -209,13 +238,13 @@ export default function Budgets() {
           }
           right={
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <Pressable onPress={() => setEntryMode('cards')} style={[styles.iconBtn, entryMode === 'cards' && styles.iconBtnActive]} hitSlop={8}>
+              <Pressable onPress={() => setEntryMode('cards')} style={[styles.iconBtn, entryMode === 'cards' && styles.iconBtnActive]} hitSlop={4} accessibilityRole="button" accessibilityLabel="Card view">
                 <LayoutGrid size={18} color={entryMode === 'cards' ? Colors.accentLight : Colors.text2} />
               </Pressable>
-              <Pressable onPress={openBulk} style={[styles.iconBtn, entryMode === 'bulk' && styles.iconBtnActive]} hitSlop={8}>
+              <Pressable onPress={openBulk} style={[styles.iconBtn, entryMode === 'bulk' && styles.iconBtnActive]} hitSlop={4} accessibilityRole="button" accessibilityLabel="Bulk entry">
                 <Table2 size={18} color={entryMode === 'bulk' ? Colors.accentLight : Colors.text2} />
               </Pressable>
-              <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={8}>
+              <Pressable onPress={openAdd} style={styles.addBtn} hitSlop={4} accessibilityRole="button" accessibilityLabel="Add budget">
                 <Plus size={20} color="#fff" />
               </Pressable>
             </View>
@@ -224,28 +253,41 @@ export default function Budgets() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <PageHero
+          label="Planned budget"
+          value={fmt(totalPlanned)}
+          sub={`${categoryCount} ${categoryCount === 1 ? 'category' : 'categories'} \u2022 ${viewMode === 'month' ? `${MONTHS[viewMonth]} ${viewYear}` : viewYear}`}
+          actionLabel="Vs spent"
+          onPress={() => openDetail()}
+          stats={[
+            { label: 'Spent', value: fmt(totalSpent) },
+            { label: remaining >= 0 ? 'Remaining' : 'Over by', value: fmt(Math.abs(remaining)) },
+            { label: 'Used', value: totalPlanned > 0 ? `${usedPct}%` : '\u2014' },
+          ]}
+        />
+
         {/* Period Navigator */}
         <Card style={styles.navCard}>
           <View style={styles.modeToggle}>
-            <Pressable style={[styles.modeTab, viewMode === 'month' && styles.modeTabActive]} onPress={() => setViewMode('month')}>
+            <Pressable style={[styles.modeTab, viewMode === 'month' && styles.modeTabActive]} onPress={() => setViewMode('month')} accessibilityRole="button" accessibilityLabel="Monthly view">
               <Text style={[styles.modeTabText, viewMode === 'month' && styles.modeTabTextActive]}>Monthly</Text>
             </Pressable>
-            <Pressable style={[styles.modeTab, viewMode === 'year' && styles.modeTabActive]} onPress={() => setViewMode('year')}>
+            <Pressable style={[styles.modeTab, viewMode === 'year' && styles.modeTabActive]} onPress={() => setViewMode('year')} accessibilityRole="button" accessibilityLabel="Yearly view">
               <Text style={[styles.modeTabText, viewMode === 'year' && styles.modeTabTextActive]}>Yearly</Text>
             </Pressable>
           </View>
 
           {viewMode === 'month' && (
             <View style={styles.periodRow}>
-              <Pressable onPress={prevMonth} style={styles.navArrow} hitSlop={8}><ChevronLeft size={18} color={Colors.text1} /></Pressable>
+              <Pressable onPress={prevMonth} style={styles.navArrow} hitSlop={4} accessibilityRole="button" accessibilityLabel="Previous month"><ChevronLeft size={18} color={Colors.text1} /></Pressable>
               <Text style={styles.periodLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
-              <Pressable onPress={nextMonth} style={styles.navArrow} hitSlop={8}><ChevronRight size={18} color={Colors.text1} /></Pressable>
+              <Pressable onPress={nextMonth} style={styles.navArrow} hitSlop={4} accessibilityRole="button" accessibilityLabel="Next month"><ChevronRight size={18} color={Colors.text1} /></Pressable>
             </View>
           )}
           <View style={styles.periodRow}>
-            <Pressable onPress={() => setViewYear((y) => y - 1)} style={styles.navArrow} hitSlop={8}><ChevronLeft size={18} color={Colors.text1} /></Pressable>
+            <Pressable onPress={() => setViewYear((y) => y - 1)} style={styles.navArrow} hitSlop={4} accessibilityRole="button" accessibilityLabel="Previous year"><ChevronLeft size={18} color={Colors.text1} /></Pressable>
             <Text style={styles.periodLabel}>{viewYear}</Text>
-            <Pressable onPress={() => setViewYear((y) => y + 1)} style={styles.navArrow} hitSlop={8}><ChevronRight size={18} color={Colors.text1} /></Pressable>
+            <Pressable onPress={() => setViewYear((y) => y + 1)} style={styles.navArrow} hitSlop={4} accessibilityRole="button" accessibilityLabel="Next year"><ChevronRight size={18} color={Colors.text1} /></Pressable>
           </View>
         </Card>
 
@@ -264,7 +306,7 @@ export default function Budgets() {
                 const saved = savedCountFor(g);
                 const active = bulkGroup === g;
                 return (
-                  <Pressable key={g} onPress={() => setBulkGroup(g)} style={[styles.bulkTab, active && styles.bulkTabActive]}>
+                  <Pressable key={g} onPress={() => setBulkGroup(g)} style={[styles.bulkTab, active && styles.bulkTabActive]} accessibilityRole="button" accessibilityLabel={`Group ${g}`}>
                     <Text style={[styles.bulkTabText, active && styles.bulkTabTextActive]}>{g}</Text>
                     {saved > 0 ? (
                       <View style={styles.bulkSavedDot}><Text style={styles.bulkSavedDotText}>{saved}</Text></View>
@@ -310,41 +352,58 @@ export default function Budgets() {
             )}
           </Card>
         ) : viewBudgets.length === 0 ? (
-          <EmptyState
-            icon={PieChart}
-            title={`No Budgets for ${viewMode === 'month' ? `${MONTHS[viewMonth]} ${viewYear}` : viewYear}`}
-            description='Tap "+" to plan a budget for a category.'
-          />
+          <Card style={styles.emptyCard}>
+            <View style={[styles.emptyIcon, { backgroundColor: Colors.blueBg }]}><Target size={26} color={Colors.blue} /></View>
+            <Text style={styles.emptyTitle}>{`No budgets for ${viewMode === 'month' ? `${MONTHS[viewMonth]} ${viewYear}` : viewYear}`}</Text>
+            <Text style={styles.emptyText}>Set a limit for your categories and Assetra will track every rupee against it.</Text>
+            <Button title="Add a budget" icon={<Plus size={16} color="#fff" />} onPress={openAdd} />
+            {groupList.length > 0 ? <Button title="Bulk entry" variant="ghost" onPress={openBulk} /> : null}
+          </Card>
         ) : (
-          Object.entries(byGroup).map(([group, items]) => (
-            <Card key={group} style={styles.groupCard}>
-              <View style={styles.groupHeader}>
-                <Badge label={group} color={GroupColors[group] || Colors.text2} />
-                <Text style={styles.groupTotal}>
-                  Planned: <Text style={{ fontWeight: '700', color: Colors.text1 }}>{fmt(items.reduce((s, b) => s + Number(b.plannedAmount || 0), 0))}</Text>
-                </Text>
-              </View>
-              <View style={{ gap: Spacing.sm }}>
-                {items.map((b: any) => (
-                  <View key={b.id} style={styles.budgetItem}>
-                    <View style={styles.bcHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bcName}>{b.category}</Text>
-                        {b.subcategory ? <Text style={styles.bcSub}>{b.subcategory}</Text> : null}
-                      </View>
-                      <View style={styles.actionsRow}>
-                        <Pressable onPress={() => openEdit(b)} hitSlop={8}><Edit2 size={15} color={Colors.text2} /></Pressable>
-                        <Pressable onPress={() => handleDelete(b.id)} hitSlop={8}><Trash2 size={15} color={Colors.red} /></Pressable>
-                      </View>
+          <>
+            <FilterChips options={groupChips} value={activeGroup} onChange={setGroupFilter} />
+            {visibleGroups.map(([group, items]) => {
+              const gColor = GroupColors[group] || Colors.text2;
+              return (
+                <Card key={group} style={styles.groupCard}>
+                  <View style={styles.groupHeader}>
+                    <View style={styles.groupTitleRow}>
+                      <View style={[styles.groupDot, { backgroundColor: gColor }]} />
+                      <Text style={styles.groupName} numberOfLines={1}>{group}</Text>
                     </View>
-                    <Text style={styles.bcAmount}>{fmt(b.plannedAmount)}</Text>
-                    {b.notes ? <Text style={styles.bcNotes}>{b.notes}</Text> : null}
-                    <Text style={styles.bcPeriod}>{b.month} {b.year}</Text>
+                    <Text style={styles.groupTotal} numberOfLines={1}>
+                      Planned <Text style={{ fontWeight: '800', color: Colors.text1 }}>{fmt(items.reduce((s, b) => s + Number(b.plannedAmount || 0), 0))}</Text>
+                    </Text>
                   </View>
-                ))}
-              </View>
-            </Card>
-          ))
+                  <View style={{ gap: Spacing.sm }}>
+                    {items.map((b: any) => (
+                      <Tap key={b.id} onPress={() => openDetail(b.category)} accessibilityLabel={`${b.category}${b.subcategory ? `, ${b.subcategory}` : ''}, planned ${fmt(b.plannedAmount)}. Tap to see spending`}>
+                        <View style={[styles.budgetItem, { borderLeftColor: gColor }]}>
+                          <View style={styles.bcHeader}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.bcName} numberOfLines={1}>{b.category}</Text>
+                              {b.subcategory ? <Text style={styles.bcSub} numberOfLines={1}>{b.subcategory}</Text> : null}
+                            </View>
+                            <View style={styles.actionsRow}>
+                              <Pressable onPress={() => openEdit(b)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Edit ${b.category} budget`}>
+                                <Edit2 size={16} color={Colors.text2} />
+                              </Pressable>
+                              <Pressable onPress={() => handleDelete(b.id)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Delete ${b.category} budget`}>
+                                <Trash2 size={16} color={Colors.red} />
+                              </Pressable>
+                            </View>
+                          </View>
+                          <Text style={styles.bcAmount} numberOfLines={1} adjustsFontSizeToFit>{fmt(b.plannedAmount)}</Text>
+                          {b.notes ? <Text style={styles.bcNotes}>{b.notes}</Text> : null}
+                          <Text style={styles.bcPeriod}>{b.month} {b.year}</Text>
+                        </View>
+                      </Tap>
+                    ))}
+                  </View>
+                </Card>
+              );
+            })}
+          </>
         )}
       </ScrollView>
 
@@ -379,51 +438,59 @@ export default function Budgets() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   headerWrap: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
-  addBtn: { width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  addBtn: { width: 40, height: 40, borderRadius: Radius.sm, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
   navCard: { gap: Spacing.md },
-  modeToggle: { flexDirection: 'row', gap: 4, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: Radius.sm, padding: 4 },
-  modeTab: { flex: 1, paddingVertical: 8, borderRadius: Radius.sm - 2, alignItems: 'center' },
+  modeToggle: { flexDirection: 'row', gap: 4, backgroundColor: Colors.inset, borderRadius: Radius.sm, padding: 4 },
+  modeTab: { flex: 1, minHeight: 44, justifyContent: 'center', paddingVertical: 8, borderRadius: Radius.sm - 2, alignItems: 'center' },
   modeTabActive: { backgroundColor: Colors.accent },
   modeTabText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.base },
   modeTabTextActive: { color: '#fff' },
   periodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   navArrow: {
-    width: 32, height: 32, borderRadius: Radius.sm, backgroundColor: Colors.panel,
+    width: 44, height: 44, borderRadius: Radius.sm, backgroundColor: Colors.panel,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   periodLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text1 },
   groupCard: { gap: Spacing.md },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, marginBottom: Spacing.xs },
+  groupTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexShrink: 1 },
+  groupDot: { width: 12, height: 12, borderRadius: 6 },
+  groupName: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md, flexShrink: 1 },
+  iconAction: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panelHover },
+  emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800', textAlign: 'center' },
+  emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
   groupTotal: { fontSize: FontSize.sm, color: Colors.text2 },
   budgetItem: {
-    backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border,
-    padding: Spacing.md, gap: 4,
+    backgroundColor: Colors.inset, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing.md, gap: 4, borderLeftWidth: 4,
   },
   bcHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   bcName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },
   bcSub: { color: Colors.text2, fontSize: FontSize.sm, marginTop: 2 },
-  actionsRow: { flexDirection: 'row', gap: Spacing.sm, paddingTop: 2 },
+  actionsRow: { flexDirection: 'row', gap: Spacing.xs },
   bcAmount: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.lg, marginTop: 4 },
   bcNotes: { color: Colors.text2, fontSize: FontSize.sm, fontStyle: 'italic', marginTop: 2 },
   bcPeriod: { color: Colors.text3, fontSize: FontSize.xs, marginTop: 4 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
   iconBtn: {
-    width: 36, height: 36, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
   },
-  iconBtnActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  iconBtnActive: { backgroundColor: 'rgba(79,70,229,0.15)', borderColor: 'rgba(79,70,229,0.3)' },
   bulkHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.sm },
   bulkHeaderText: { color: Colors.text1, fontSize: FontSize.sm, flex: 1, minWidth: 160 },
   bulkTabsRow: { gap: Spacing.sm, paddingVertical: 2 },
   bulkTab: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingVertical: 8, paddingHorizontal: Spacing.md,
     borderRadius: Radius.pill, backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
   },
-  bulkTabActive: { backgroundColor: 'rgba(99,102,241,0.15)', borderColor: 'rgba(99,102,241,0.3)' },
+  bulkTabActive: { backgroundColor: 'rgba(79,70,229,0.15)', borderColor: 'rgba(79,70,229,0.3)' },
   bulkTabText: { color: Colors.text2, fontWeight: '600', fontSize: FontSize.sm },
   bulkTabTextActive: { color: Colors.accentLight },
   bulkSavedDot: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.green, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
@@ -432,13 +499,13 @@ const styles = StyleSheet.create({
   bulkCatBlock: { gap: Spacing.sm },
   bulkCatHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm,
-    backgroundColor: 'rgba(99,102,241,0.1)', borderRadius: Radius.sm, padding: Spacing.sm,
+    backgroundColor: 'rgba(79,70,229,0.1)', borderRadius: Radius.sm, padding: Spacing.sm,
   },
   bulkCatLabel: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base, flex: 1 },
   bulkSubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, paddingLeft: Spacing.lg },
   bulkSubLabel: { color: Colors.text2, fontSize: FontSize.sm, flex: 1 },
   bulkInput: {
     width: 110, paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.sm, textAlign: 'right',
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)', color: Colors.text1, fontSize: FontSize.base,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.inset, color: Colors.text1, fontSize: FontSize.base,
   },
-});
+}));

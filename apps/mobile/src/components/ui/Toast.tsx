@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Text, StyleSheet } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import { CheckCircle2, AlertTriangle } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Shadow } from '../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Shadow, createStyles } from '../../constants/theme';
 
 export type ToastType = 'success' | 'error';
 
@@ -28,7 +29,7 @@ export default function Toast({ toast }: { toast: { type: ToastType; msg: string
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   wrap: {
     position: 'absolute', bottom: 100, left: Spacing.lg, right: Spacing.lg, zIndex: 999,
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -36,4 +37,4 @@ const styles = StyleSheet.create({
     ...Shadow.xl,
   },
   text: { fontSize: FontSize.base, fontWeight: '500', flex: 1 },
-});
+}));

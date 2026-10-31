@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
-import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
 
 export default function ScreenHeader({
   title, subtitle, right, showBack, hideEye,
@@ -33,7 +34,7 @@ export default function ScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   wrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xl, gap: Spacing.md },
   backBtn: {
     width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: Colors.panel,
@@ -47,4 +48,4 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border,
   },
-});
+}));

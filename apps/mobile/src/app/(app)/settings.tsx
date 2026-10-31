@@ -1,19 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { Text } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Home, User, Save, LogOut, Trash2, RefreshCcw, FlaskConical,
-  CheckCircle2, AlertTriangle, CloudUpload, Edit2, Download, Upload, FileSpreadsheet, Lock,
+  CheckCircle2, AlertTriangle, CloudUpload, Edit2, Download, Upload, FileSpreadsheet, Lock, Users,
 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { Card, Button, Badge, FormField, SelectField, AppModal, ScreenHeader, Toast } from '../../components/ui';
 import { useToast } from '../../hooks/useToast';
 import { MAX_NAME_LENGTH } from '../../utils/validation';
-import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
 import { getDriveAuth, disconnectDrive, uploadToDrive, useGoogleDriveConnect } from '../../utils/googleDriveSync';
 import { exportJSON, exportCSV, exportExcel, exportReport, pickBackupJson } from '../../utils/dataTransfer';
 import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
+import AppearanceCard from '../../components/AppearanceCard';
 import PinSetupModal from '../../components/PinSetupModal';
 import { hasPin as checkHasPin, clearPin } from '../../utils/appLock';
 import { saveSafetySnapshot, getSafetySnapshotMeta, loadSafetySnapshot } from '../../utils/safetySnapshot';
@@ -320,10 +322,12 @@ export default function Settings() {
       <ScrollView contentContainerStyle={styles.content}>
         <ScreenHeader title="Settings" subtitle="Manage your household, data, backup and account preferences" showBack hideEye />
 
+        <AppearanceCard />
+
         {/* App Lock */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <Lock size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.accentLight) + '1f' }]}><Lock size={18} color={Colors.accentLight} /></View>
             <Text style={styles.sectionTitle}>App Lock</Text>
           </View>
           <Text style={styles.sectionDesc}>
@@ -343,7 +347,7 @@ export default function Settings() {
         {/* Household */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <Home size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.blue) + '1f' }]}><Home size={18} color={Colors.blue} /></View>
             <Text style={styles.sectionTitle}>Household</Text>
           </View>
           <FormField
@@ -359,7 +363,7 @@ export default function Settings() {
         {/* Profile */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <User size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.accent2) + '1f' }]}><User size={18} color={Colors.accent2} /></View>
             <Text style={styles.sectionTitle}>Your Profile</Text>
           </View>
           <View style={styles.profileRow}>
@@ -382,7 +386,7 @@ export default function Settings() {
         {/* Export & Import */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <Download size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.green) + '1f' }]}><Download size={18} color={Colors.green} /></View>
             <Text style={styles.sectionTitle}>Export & Import</Text>
           </View>
           <Text style={styles.sectionDesc}>Your data stays 100% private — export a backup or import one to restore.</Text>
@@ -395,7 +399,7 @@ export default function Settings() {
         {/* Download Report */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <FileSpreadsheet size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.yellow) + '1f' }]}><FileSpreadsheet size={18} color={Colors.yellow} /></View>
             <Text style={styles.sectionTitle}>Download Report</Text>
           </View>
           <SelectField label="Period" value={reportPeriod} onChange={(v) => setReportPeriod(v as 'monthly' | 'yearly')}
@@ -412,7 +416,7 @@ export default function Settings() {
         {/* Google Drive Backup */}
         <Card style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <CloudUpload size={18} color={Colors.text2} />
+            <View style={[styles.sectionIcon, { backgroundColor: (Colors.blue) + '1f' }]}><CloudUpload size={18} color={Colors.blue} /></View>
             <Text style={styles.sectionTitle}>Google Drive Backup</Text>
           </View>
           <Text style={styles.sectionDesc}>
@@ -450,10 +454,9 @@ export default function Settings() {
                 icon={syncStatus === 'syncing' ? undefined : <CloudUpload size={14} color="#fff" />}
                 loading={syncStatus === 'syncing'}
                 onPress={handleSyncNow}
-                size="sm"
                 style={{ flex: 1 }}
               />
-              <Button title="Disconnect" variant="ghost" size="sm" onPress={handleDisconnectDrive} style={{ flex: 1 }} />
+              <Button title="Disconnect" variant="ghost" size="sm" onPress={handleDisconnectDrive} style={{ flex: 1, minHeight: 48 }} />
             </View>
           ) : null}
           <Text style={styles.driveMeta}>Last backup: {lastBackup}</Text>
@@ -463,7 +466,6 @@ export default function Settings() {
               icon={connecting ? undefined : <CloudUpload size={14} color="#fff" />}
               loading={connecting}
               onPress={handleConnectDrive}
-              size="sm"
               style={{ marginTop: Spacing.md }}
             />
           )}
@@ -472,8 +474,11 @@ export default function Settings() {
         {/* Family Members */}
         <Card style={styles.section}>
           <View style={styles.membersHeaderRow}>
-            <Text style={styles.sectionTitle}>Family Members</Text>
-            <Button title="Add Member" size="sm" variant="secondary" onPress={openAddMember} />
+            <View style={[styles.sectionTitleRow, { flex: 1 }]}>
+              <View style={[styles.sectionIcon, { backgroundColor: Colors.accent2 + '1f' }]}><Users size={18} color={Colors.accent2} /></View>
+              <Text style={styles.sectionTitle}>Family Members</Text>
+            </View>
+            <Button title="Add Member" size="sm" variant="secondary" onPress={openAddMember} style={{ minHeight: 48 }} />
           </View>
           <Text style={styles.sectionDesc}>
             Assetra is a single-user account (you sign in with your own Google account). Add family members here
@@ -493,11 +498,11 @@ export default function Settings() {
                   <Text style={styles.memberRelation}>{m.relation}</Text>
                 </View>
                 <View style={styles.memberActions}>
-                  <Pressable onPress={() => openEditMember(m)} hitSlop={8}>
-                    <Edit2 size={15} color={Colors.text2} />
+                  <Pressable onPress={() => openEditMember(m)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Edit ${m.name}`}>
+                    <Edit2 size={16} color={Colors.text2} />
                   </Pressable>
-                  <Pressable onPress={() => handleDeleteMember(m.id)} hitSlop={8}>
-                    <Trash2 size={15} color={Colors.red} />
+                  <Pressable onPress={() => handleDeleteMember(m.id)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Remove ${m.name}`}>
+                    <Trash2 size={16} color={Colors.red} />
                   </Pressable>
                 </View>
               </View>
@@ -508,7 +513,7 @@ export default function Settings() {
         {/* Danger Zone */}
         <Card style={[styles.section, styles.dangerCard]}>
           <View style={styles.sectionTitleRow}>
-            <Trash2 size={18} color={Colors.red} />
+            <View style={[styles.sectionIcon, { backgroundColor: Colors.redBg }]}><Trash2 size={18} color={Colors.red} /></View>
             <Text style={[styles.sectionTitle, { color: Colors.red }]}>Danger Zone</Text>
           </View>
 
@@ -520,7 +525,7 @@ export default function Settings() {
               </View>
               <Text style={styles.dangerRowDesc}>Wipes everything and starts fresh with empty data. Cannot be undone.</Text>
             </View>
-            <Button title="Reset to Empty" variant="danger" size="sm" onPress={handleReset} />
+            <Button title="Reset to Empty" variant="danger" size="sm" onPress={handleReset} style={styles.dangerBtn} />
           </View>
 
           <View style={styles.dangerRow}>
@@ -531,7 +536,7 @@ export default function Settings() {
               </View>
               <Text style={styles.dangerRowDesc}>Replaces current data with the Kumar Family demo dataset.</Text>
             </View>
-            <Button title="Load Sample" variant="secondary" size="sm" onPress={handleLoadSample} />
+            <Button title="Load Sample" variant="secondary" size="sm" onPress={handleLoadSample} style={styles.dangerBtn} />
           </View>
 
           {snapshotMeta && (
@@ -545,7 +550,7 @@ export default function Settings() {
                   From before your last {snapshotMeta.reason === 'reset' ? 'Reset' : 'Load Sample'} ({new Date(snapshotMeta.savedAt).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })})
                 </Text>
               </View>
-              <Button title="Restore" variant="secondary" size="sm" onPress={handleRestoreSnapshot} />
+              <Button title="Restore" variant="secondary" size="sm" onPress={handleRestoreSnapshot} style={styles.dangerBtn} />
             </View>
           )}
         </Card>
@@ -599,12 +604,15 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   content: { padding: Spacing.lg, paddingBottom: 100 },
   section: { marginBottom: Spacing.lg, gap: Spacing.md },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text1 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  sectionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  iconAction: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panelHover },
+  dangerBtn: { minHeight: 48, justifyContent: 'center' },
+  sectionTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text1, flexShrink: 1 },
   sectionDesc: { fontSize: FontSize.base, color: Colors.text2, lineHeight: 19 },
 
   // Profile
@@ -629,7 +637,7 @@ const styles = StyleSheet.create({
   emptyMembersText: { color: Colors.text2, fontSize: FontSize.base },
   memberRow: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border,
+    paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border, minHeight: 60,
   },
   memberAvatar: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.panelHover,
@@ -638,10 +646,10 @@ const styles = StyleSheet.create({
   memberAvatarText: { color: Colors.accentLight, fontWeight: '700', fontSize: FontSize.base },
   memberName: { color: Colors.text1, fontWeight: '600', fontSize: FontSize.md },
   memberRelation: { color: Colors.text2, fontSize: FontSize.sm, marginTop: 1 },
-  memberActions: { flexDirection: 'row', gap: Spacing.sm },
+  memberActions: { flexDirection: 'row', gap: Spacing.xs },
 
   // Danger zone
-  dangerCard: { borderColor: 'rgba(244,63,94,0.3)' },
+  dangerCard: { borderColor: Colors.red + '4d' },
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md,
     paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border,
@@ -652,4 +660,4 @@ const styles = StyleSheet.create({
 
   // Modal
   modalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-});
+}));

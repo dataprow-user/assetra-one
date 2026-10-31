@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, Alert, StyleSheet } from 'react-native';
+import { Modal, View, Pressable, Alert, StyleSheet } from 'react-native';
+import { Text } from './ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BrandMark from './BrandMark';
 import PinPad from './PinPad';
 import { verifyPin, clearPin } from '../utils/appLock';
 import { useApp } from '../context/AppContext';
-import { Colors, FontSize, Spacing, Radius, Shadow } from '../constants/theme';
+import { Colors, FontSize, Spacing, Radius, Shadow, createStyles } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // Full-screen gate shown whenever the app opens or returns from the
@@ -56,11 +57,11 @@ export default function PinLockScreen({ onUnlock }: { onUnlock: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   bg: { flex: 1, backgroundColor: Colors.bgPrimary },
   safe: { flex: 1, alignItems: 'center', paddingTop: Spacing.xxxl },
   logoBadge: { width: 52, height: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.xxl, ...Shadow.glow },
   padWrap: { flex: 1, justifyContent: 'center' },
   forgotBtn: { paddingVertical: Spacing.lg },
   forgotText: { color: Colors.text2, fontSize: FontSize.base, fontWeight: '600' },
-});
+}));

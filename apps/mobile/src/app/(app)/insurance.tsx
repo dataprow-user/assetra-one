@@ -1,17 +1,20 @@
+import RecordSheet from '../../components/RecordSheet';
 import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, FlatList, Pressable, Alert } from 'react-native';
+import { Text } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, Plus, Edit2, Trash2 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
-import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, DateField, ScreenHeader } from '../../components/ui';
+import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, DateField, ScreenHeader, PageHero, FilterChips, Tap } from '../../components/ui';
+import type { ChipOption } from '../../components/ui';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
-import { Colors, FontSize, Spacing, Radius } from '../../constants/theme';
+import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
 import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Insurance.jsx — same field set, same
 // day-count/badge logic for renewal reminders.
 const INS_TYPES = ['life', 'health', 'vehicle', 'term'];
-const INS_COLORS: Record<string, string> = { life: Colors.blue, health: Colors.green, vehicle: Colors.yellow, term: Colors.accentLight };
+const INS_COLORS: Record<string, string> = { get life() { return Colors.blue; }, get health() { return Colors.green; }, get vehicle() { return Colors.yellow; }, get term() { return Colors.accentLight; } };
 const FREQUENCIES = [{ label: 'Monthly', value: 'monthly' }, { label: 'Yearly', value: 'yearly' }];
 
 const emptyForm = () => ({ name: '', type: 'term', policyNo: '', premium: '', frequency: 'yearly', sumAssured: '', nextDue: '' });
@@ -27,6 +30,7 @@ const getDaysLeft = (dateStr: string) => {
 export default function Insurance() {
   const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
   const { insurance = [] } = state;
+  const [detail, setDetail] = useState<any>(null);
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [form, setForm] = useState(emptyForm());
   const { errors, validate, reset: resetErrors } = useFieldErrors();
@@ -64,61 +68,122 @@ export default function Insurance() {
     ]);
   };
 
+  const annualOf = (p: any) => {
+    const f = String(p.frequency || '').toLowerCase().replace(/[\s-]/g, '_');
+    const mult = f === 'monthly' ? 12 : f === 'quarterly' ? 4 : f === 'half_yearly' || f === 'halfyearly' ? 2 : 1;
+    return Number(p.premium || 0) * mult;
+  };
+  const totalAnnual = insurance.reduce((s: number, p: any) => s + annualOf(p), 0);
+  const totalCover = insurance.reduce((s: number, p: any) => s + Number(p.sumAssured || 0), 0);
+  const withDays = insurance.map((p: any) => ({ p, days: getDaysLeft(p.nextDue) }));
+  const upcoming = withDays.filter((x) => x.days !== null && x.days >= 0).map((x) => x.days as number);
+  const nextDueDays = upcoming.length ? Math.min(...upcoming) : null;
+  const hasOverdue = withDays.some((x) => x.days !== null && x.days < 0);
+  const nextDueText = nextDueDays !== null ? (nextDueDays === 0 ? 'Today' : `${nextDueDays} day${nextDueDays === 1 ? '' : 's'}`) : hasOverdue ? 'Overdue' : '—';
+
+  const [filterType, setFilterType] = useState('all');
+  const typeKeys = Array.from(new Set([...INS_TYPES, ...insurance.map((p: any) => String(p.type || '')).filter(Boolean)]));
+  const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const chipOptions: ChipOption[] = [
+    { key: 'all', label: 'All', count: insurance.length },
+    ...typeKeys
+      .map((t) => ({ key: t, label: typeLabel(t), color: INS_COLORS[t] || Colors.text2, count: insurance.filter((p: any) => p.type === t).length }))
+      .filter((o) => o.count > 0 || o.key === filterType),
+  ];
+  const sorted = [...insurance]
+    .filter((p: any) => filterType === 'all' || p.type === filterType)
+    .sort((x: any, y: any) => {
+      const dx = x.nextDue ? +new Date(x.nextDue) : Infinity;
+      const dy = y.nextDue ? +new Date(y.nextDue) : Infinity;
+      return dx === dy ? 0 : dx < dy ? -1 : 1;
+    });
+
+  const header = (
+    <View style={styles.listHeader}>
+      <PageHero
+        label="Annual premium"
+        value={fmt(totalAnnual)}
+        sub={insurance.length === 0 ? 'No policies tracked yet' : `Total cover ${fmt(totalCover)} across ${insurance.length} ${insurance.length === 1 ? 'policy' : 'policies'}`}
+        stats={[
+          { label: 'Policies', value: String(insurance.length) },
+          { label: 'Total cover', value: fmt(totalCover) },
+          { label: 'Next due', value: nextDueText },
+        ]}
+      />
+      {insurance.length > 0 ? <FilterChips options={chipOptions} value={filterType} onChange={setFilterType} /> : null}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.headerWrap}>
         <ScreenHeader
           title="Insurance Policies"
-          subtitle={`${insurance.length} active policies`}
           showBack
           right={<Button title="Add" icon={<Plus size={16} color="#fff" />} size="sm" onPress={openAdd} />}
         />
       </View>
 
-      <FlatList extraData={fmt} 
-        data={insurance}
+      <FlatList extraData={[fmt, filterType]}
+        data={sorted}
         keyExtractor={(p: any) => p.id}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<EmptyState icon={Shield} title="No Policies" description="Add life, health, vehicle, or term insurance policies." />}
-        renderItem={({ item: p }) => {
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          insurance.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <View style={[styles.emptyIcon, { backgroundColor: Colors.blueBg }]}><Shield size={26} color={Colors.blue} /></View>
+              <Text style={styles.emptyTitle}>No policies yet</Text>
+              <Text style={styles.emptyText}>Add life, health, vehicle or term policies and never miss a renewal.</Text>
+              <Button title="Add your first policy" icon={<Plus size={16} color="#fff" />} onPress={openAdd} />
+            </Card>
+          ) : (
+            <EmptyState icon={Shield} title="No policies of this type" description="Pick another filter above." />
+          )
+        }
+        renderItem={({ item: p }: { item: any }) => {
           const daysLeft = getDaysLeft(p.nextDue);
           const color = INS_COLORS[p.type] || Colors.text2;
-          const dueColor = daysLeft === null ? Colors.text2 : daysLeft <= 7 ? Colors.red : daysLeft <= 30 ? Colors.yellow : Colors.green;
-          const dueLabel = daysLeft === null ? '' : daysLeft === 0 ? 'Today' : daysLeft < 0 ? 'Overdue' : `${daysLeft}d`;
+          const dueColor = daysLeft === null ? Colors.text2 : daysLeft < 0 ? Colors.red : daysLeft <= 7 ? Colors.red : daysLeft <= 30 ? Colors.yellow : Colors.green;
+          const dueLabel = daysLeft === null ? 'No date' : daysLeft < 0 ? 'Overdue' : daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
           return (
-            <Card style={styles.policyCard}>
-              <View style={styles.topRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.policyName} numberOfLines={1}>{p.name}</Text>
-                  {p.policyNo ? <Text style={styles.policyNo}>{p.policyNo}</Text> : null}
+            <Tap onPress={() => setDetail(p)} accessibilityLabel={`${p.name}, ${typeLabel(String(p.type || ''))} policy, premium ${fmt(p.premium)} ${p.frequency || ''}, ${dueLabel}. Tap for details`}>
+              <Card style={[styles.policyCard, { borderLeftWidth: 4, borderLeftColor: dueColor }]}>
+                <View style={styles.topRow}>
+                  <View style={{ flex: 1, flexShrink: 1 }}>
+                    <Text style={styles.policyName} numberOfLines={1}>{p.name}</Text>
+                    {p.policyNo ? <Text style={styles.policyNo} numberOfLines={1}>{p.policyNo}</Text> : null}
+                  </View>
+                  <View style={styles.actionsRow}>
+                    <Pressable onPress={() => openEdit(p)} hitSlop={8} style={styles.miniBtn} accessibilityRole="button" accessibilityLabel={`Edit ${p.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
+                    <Pressable onPress={() => handleDelete(p.id)} hitSlop={8} style={styles.miniBtn} accessibilityRole="button" accessibilityLabel={`Delete ${p.name}`}><Trash2 size={16} color={Colors.red} /></Pressable>
+                  </View>
                 </View>
-                <View style={styles.actionsRow}>
-                  <Pressable onPress={() => openEdit(p)} hitSlop={8}><Edit2 size={15} color={Colors.text2} /></Pressable>
-                  <Pressable onPress={() => handleDelete(p.id)} hitSlop={8}><Trash2 size={15} color={Colors.red} /></Pressable>
-                </View>
-              </View>
 
-              <View style={styles.badgeRow}>
-                <Badge label={p.type} color={color} />
-                <Badge label={p.frequency} color={Colors.text2} />
-              </View>
-
-              <View style={styles.statsRow}>
-                <View>
-                  <Text style={styles.statLabel}>Premium</Text>
-                  <Text style={styles.premiumValue}>{fmt(p.premium)}</Text>
+                <View style={styles.badgeRow}>
+                  <Badge label={typeLabel(String(p.type || ''))} color={color} />
+                  <Badge label={typeLabel(String(p.frequency || ''))} color={Colors.text2} />
                 </View>
-                <View>
-                  <Text style={styles.statLabel}>Sum Assured</Text>
-                  <Text style={styles.sumValue}>{fmt(p.sumAssured)}</Text>
-                </View>
-              </View>
 
-              <View style={styles.dueRow}>
-                {daysLeft !== null ? <Badge label={dueLabel} color={dueColor} /> : null}
-                <Text style={styles.dueDate}>{p.nextDue}</Text>
-              </View>
-            </Card>
+                <View style={styles.statsRow}>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>Premium</Text>
+                    <Text style={styles.premiumValue} numberOfLines={1} adjustsFontSizeToFit>{fmt(p.premium)}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>Sum assured</Text>
+                    <Text style={styles.sumValue} numberOfLines={1} adjustsFontSizeToFit>{fmt(p.sumAssured)}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.dueRow}>
+                  <View style={[styles.dueBadge, { backgroundColor: dueColor + '1f' }]}>
+                    <Text style={[styles.dueBadgeText, { color: dueColor }]} numberOfLines={1}>{dueLabel}</Text>
+                  </View>
+                  {p.nextDue ? <Text style={styles.dueDate} numberOfLines={1}>Next due {p.nextDue}</Text> : null}
+                </View>
+              </Card>
+            </Tap>
           );
         }}
       />
@@ -145,25 +210,55 @@ export default function Insurance() {
           <DateField label="Next Due Date" value={form.nextDue} onChange={(v) => setForm((f) => ({ ...f, nextDue: v }))} />
         </AppModal>
       )}
+      {(() => {
+        const p = detail ? insurance.find((x: any) => x.id === detail.id) : null;
+        if (!p) return null;
+        const dl = getDaysLeft(p.nextDue);
+        return (
+          <RecordSheet
+            visible title={p.name} subtitle={`${String(p.type || '').replace(/_/g, ' ')} insurance`}
+            headlineLabel={`Premium (${p.frequency || 'per term'})`} headline={fmt(p.premium)}
+            rows={[
+              ['Policy number', p.policyNo],
+              ['Sum assured', p.sumAssured ? fmt(p.sumAssured) : undefined],
+              ['Premium frequency', p.frequency],
+              ['Next due date', p.nextDue],
+              ['Due in', dl === null ? undefined : dl < 0 ? `Overdue by ${-dl} day${-dl === 1 ? '' : 's'}` : dl === 0 ? 'Today' : `${dl} day${dl === 1 ? '' : 's'}`],
+            ]}
+            onClose={() => setDetail(null)}
+            onEdit={() => { setDetail(null); setTimeout(() => openEdit(p), 250); }}
+            onDelete={() => { setDetail(null); setTimeout(() => handleDelete(p.id), 250); }}
+          />
+        );
+      })()}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   safe: { flex: 1, backgroundColor: Colors.bgPrimary },
   headerWrap: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
+  listHeader: { gap: Spacing.md, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  miniBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  statCol: { flex: 1, flexShrink: 1 },
+  dueBadge: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.pill },
+  dueBadgeText: { fontSize: FontSize.sm, fontWeight: '800' },
+  emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800' },
+  emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
   policyCard: { gap: Spacing.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   policyName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },
   policyNo: { color: Colors.text2, fontSize: FontSize.sm, marginTop: 2 },
-  actionsRow: { flexDirection: 'row', gap: Spacing.sm },
+  actionsRow: { flexDirection: 'row', gap: 0 },
   badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md },
   statLabel: { fontSize: FontSize.sm, color: Colors.text2 },
   premiumValue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.red, marginTop: 2 },
   sumValue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text1, marginTop: 2 },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
   dueDate: { fontSize: FontSize.sm, color: Colors.text2 },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-});
+}));

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TextInput, StyleSheet, TextInputProps } from 'react-native';
-import { Colors, Radius, FontSize, Spacing } from '../../constants/theme';
+import { View, StyleSheet, TextInputProps } from 'react-native';
+import { Text, TextInput } from './AppText';
+import { Colors, Radius, FontSize, Spacing, createStyles } from '../../constants/theme';
 
 export default function FormField({
   label, hint, error, style, ...inputProps
@@ -21,16 +22,16 @@ export default function FormField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   group: { marginBottom: Spacing.lg },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   label: { fontSize: FontSize.base, fontWeight: '500', color: Colors.text2 },
   hint: { fontSize: FontSize.sm, color: Colors.text3 },
   input: {
     width: '100%', height: 48, paddingHorizontal: 14, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.inset,
     color: Colors.text1, fontSize: FontSize.md,
   },
   inputInvalid: { borderColor: Colors.red },
   error: { marginTop: 5, color: Colors.red, fontSize: FontSize.sm },
-});
+}));
