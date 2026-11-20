@@ -8,7 +8,7 @@ import { useApp } from '../../context/AppContext';
 import { Card, EmptyState, ScreenHeader, ProgressBar, BudgetBar, budgetTone } from '../../components/ui';
 import TransactionFormModal from '../../components/TransactionFormModal';
 import { Colors, FontSize, Spacing, Radius, GroupColors, createStyles } from '../../constants/theme';
-import { MONTH_NAMES, parseYMD, budgetMonthOf, getSalaryCutoff, periodPace } from '../../utils/budgetPeriod';
+import { MONTH_NAMES, parseYMD, getSalaryCutoff, getBudgetCycle, getYearWindow, currentBudgetMonth, rangePace, inRange, cycleRangeLabel } from '../../utils/budgetPeriod';
 
 // Budget vs Spent — the drill-down behind the dashboard's budget card.
 // Top-down reading order: the answer (left / over) → what needs attention →
@@ -45,9 +45,9 @@ export default function BudgetVsSpent() {
   const { transactions = [], budgets = [], expenseCategories = [], accounts = [] } = state;
   const params = useLocalSearchParams<{ category?: string; sub?: string; month?: string; year?: string; status?: string }>();
 
-  const now = new Date();
-  const [viewMonth, setViewMonth] = useState(params.month != null ? Number(params.month) : now.getMonth());
-  const [viewYear, setViewYear] = useState(params.year != null ? Number(params.year) : now.getFullYear());
+  const initial = currentBudgetMonth(state);
+  const [viewMonth, setViewMonth] = useState(params.month != null ? Number(params.month) : initial.month);
+  const [viewYear, setViewYear] = useState(params.year != null ? Number(params.year) : initial.year);
   const [period, setPeriod] = useState<'month' | 'year'>('month');
   const [groupFilter, setGroupFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(['over', 'near', 'ok', 'none'].includes(String(params.status)) ? (params.status as StatusFilter) : 'all');
@@ -73,7 +73,10 @@ export default function BudgetVsSpent() {
   const stayOnReport = () => { autoOpened.current = false; setSel(null); };
 
   const cutoff = getSalaryCutoff(state);
-  const pace = periodPace(viewYear, period === 'month' ? viewMonth : null);
+  const win = period === 'month' ? getBudgetCycle(state, viewYear, viewMonth) : getYearWindow(state, viewYear);
+  const calendarLike = win.start.slice(8) === '01';
+  const cycleNote = period === 'month' && !calendarLike ? cycleRangeLabel(win) : period === 'year' ? cycleRangeLabel(win) : '';
+  const pace = rangePace(win.start, win.end);
   const paceFrac = pace.kind === 'current' ? pace.elapsed : undefined;
   const periodLabel = period === 'month' ? `${MONTH_NAMES[viewMonth]} ${viewYear}` : `${viewYear}`;
   const setCutoff = (n: number) => dispatch({ type: 'UPDATE_HOUSEHOLD', payload: { salaryCutoffDay: Math.min(31, Math.max(1, n)) } });
@@ -81,7 +84,6 @@ export default function BudgetVsSpent() {
   const prev = () => { if (period === 'year') return setViewYear((y) => y - 1); if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); } else setViewMonth((m) => m - 1); };
   const next = () => { if (period === 'year') return setViewYear((y) => y + 1); if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); } else setViewMonth((m) => m + 1); };
 
-  const inPeriod = (ym: { year: number; month: number }) => ym.year === viewYear && (period === 'year' || ym.month === viewMonth);
 
   const groupOfCategory = (name: string) => expenseCategories.find((c: any) => c.name === name)?.group || '';
 
@@ -109,13 +111,9 @@ export default function BudgetVsSpent() {
 
     let inc = 0;
     transactions.forEach((t: any) => {
-      if (t.type === 'income') {
-        if (inPeriod(budgetMonthOf(t, cutoff))) inc += Number(t.amount || 0);
-        return;
-      }
+      if (!inRange(t.date, win.start, win.end)) return;
+      if (t.type === 'income') { inc += Number(t.amount || 0); return; }
       if (t.type !== 'expense') return;
-      const ymd = parseYMD(t.date);
-      if (!inPeriod(ymd)) return;
       const amt = Number(t.amount || 0);
       const r = getRow(t.category, t.group);
       r.spent += amt;
@@ -126,7 +124,7 @@ export default function BudgetVsSpent() {
     });
 
     return { rows: [...map.values()], income: inc };
-  }, [budgets, transactions, expenseCategories, viewMonth, viewYear, period, cutoff]);
+  }, [budgets, transactions, expenseCategories, viewMonth, viewYear, period, cutoff, win.start, win.end]);
 
   const totalPlanned = rows.reduce((s, r) => s + r.planned, 0);
   const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
@@ -197,7 +195,10 @@ export default function BudgetVsSpent() {
         {/* Compact period bar */}
         <View style={styles.periodBar}>
           <Pressable onPress={prev} style={styles.navArrow} hitSlop={8}><ChevronLeft size={18} color={Colors.text1} /></Pressable>
-          <Text style={styles.periodLabel}>{periodLabel}</Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={styles.periodLabel}>{periodLabel}</Text>
+            {cycleNote ? <Text style={styles.cycleNote}>{cycleNote}</Text> : null}
+          </View>
           <Pressable onPress={next} style={styles.navArrow} hitSlop={8}><ChevronRight size={18} color={Colors.text1} /></Pressable>
           <View style={styles.seg}>
             {(['month', 'year'] as const).map((p) => (
@@ -229,12 +230,12 @@ export default function BudgetVsSpent() {
           </View>
 
           <Pressable onPress={() => setShowCutoff((v) => !v)} style={styles.cutoffToggle} hitSlop={6}>
-            <Text style={styles.cutoffToggleText}>Salary counted from day {cutoff} · {showCutoff ? 'Hide' : 'Change'}</Text>
+            <Text style={styles.cutoffToggleText}>Budget month starts at salary (from day {cutoff}) · {showCutoff ? 'Hide' : 'Change'}</Text>
           </Pressable>
           {showCutoff && (
             <View style={styles.cutoffBox}>
               <Text style={styles.cutoffText}>
-                A salary credited on or after this day counts toward the <Text style={{ color: Colors.text1, fontWeight: '700' }}>next month</Text>.
+                A salary credited on or after this day starts the <Text style={{ color: Colors.text1, fontWeight: '700' }}>next month</Text>'s budget — spending from that day counts toward it.
               </Text>
               <View style={styles.stepper}>
                 <Pressable onPress={() => setCutoff(cutoff - 1)} style={styles.stepBtn} hitSlop={6}><Minus size={16} color={Colors.text1} /></Pressable>
@@ -542,7 +543,8 @@ const styles = createStyles(() => ({
   content: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
 
   periodBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  periodLabel: { flex: 1, textAlign: 'center', fontSize: FontSize.md, fontWeight: '700', color: Colors.text1 },
+  cycleNote: { color: Colors.text2, fontSize: FontSize.xs, fontWeight: '600', marginTop: 1 },
+  periodLabel: { textAlign: 'center', fontSize: FontSize.md, fontWeight: '700', color: Colors.text1 },
   navArrow: { width: 34, height: 34, borderRadius: Radius.sm, backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   seg: { flexDirection: 'row', gap: 2, backgroundColor: Colors.inset, borderRadius: Radius.sm, padding: 3 },
   segBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: Radius.sm - 2 },

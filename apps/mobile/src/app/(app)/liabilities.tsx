@@ -1,9 +1,16 @@
 import RecordSheet from '../../components/RecordSheet';
+import LoanFormModal from '../../components/entity/LoanFormModal';
+import TransactionFormModal from '../../components/TransactionFormModal';
+import { useTxnExplorer } from '../../components/TxnExplorer';
+import LinkPaymentsSheet from '../../components/LinkPaymentsSheet';
+import UnlinkedPaymentsSheet, { unlinkedLoanPayments } from '../../components/UnlinkedPayments';
+import { loanStatus, candidatePayments, localISO } from '../../utils/loans';
+import { categoriesTracking } from '../../utils/entities';
 import React, { useState } from 'react';
 import { View, FlatList, Pressable, Alert } from 'react-native';
 import { Text } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CreditCard, Plus, Edit2, Trash2, Settings2 } from 'lucide-react-native';
+import { CreditCard, Plus, Edit2, Trash2, Settings2, CheckCircle2, Clock, Link2, ChevronRight } from 'lucide-react-native';
 import { useApp, DEFAULT_LIABILITY_TYPES } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge, DateField, PageHero, FilterChips, Tap } from '../../components/ui';
 import type { ChipOption } from '../../components/ui';
@@ -17,20 +24,17 @@ import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, MAX_RATE, MAX_TENURE_MON
 
 const getSwatches = () => [Colors.accent, Colors.green, Colors.red, Colors.yellow, Colors.blue, Colors.accent2, '#f97316', '#06b6d4'];
 
-const emptyForm = () => ({ name: '', type: 'home_loan', principal: '', interestRate: '', tenureMonths: '', emi: '', startDate: '', outstanding: '' });
 const emptyType = () => ({ label: '', color: Colors.red });
-
-const NUMERIC_RULES = {
-  principal: { label: 'Principal Amount', min: 1, max: MAX_AMOUNT },
-  interestRate: { label: 'Interest Rate', min: 0, max: MAX_RATE, maxDecimals: 2 },
-  tenureMonths: { label: 'Tenure', min: 1, max: MAX_TENURE_MONTHS, maxDecimals: 0 },
-  emi: { label: 'EMI Amount', min: 1, max: MAX_AMOUNT },
-  outstanding: { label: 'Outstanding Balance', min: 0, max: MAX_AMOUNT },
-};
 
 export default function Liabilities() {
   const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
-  const { liabilities = [] } = state;
+  const { liabilities = [], transactions = [] } = state;
+  const st = (l: any) => loanStatus(l, transactions);
+  const [payForm, setPayForm] = useState<any>(null);
+  const explorer = useTxnExplorer();
+  const [showUnlinked, setShowUnlinked] = useState(false);
+  const [linkFor, setLinkFor] = useState<any>(null);
+  const pendingPayments = unlinkedLoanPayments(state);
   const libTypes = state.liabilityTypes && state.liabilityTypes.length > 0 ? state.liabilityTypes : DEFAULT_LIABILITY_TYPES;
 
   const typeLabels: Record<string, string> = {}, typeColors: Record<string, string> = {};
@@ -39,72 +43,10 @@ export default function Liabilities() {
   const [detail, setDetail] = useState<any>(null);
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [typeModal, setTypeModal] = useState<any>(null); // null | 'manage' | { mode, data? }
-  const [form, setForm] = useState<any>(emptyForm());
   const [typeForm, setTypeForm] = useState<any>(emptyType());
-  const { errors, validate, reset: resetErrors } = useFieldErrors();
 
-  const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
-  const openEdit = (l: any) => {
-    setForm({
-      ...l,
-      principal: String(l.principal ?? ''),
-      interestRate: String(l.interestRate ?? ''),
-      tenureMonths: String(l.tenureMonths ?? ''),
-      emi: String(l.emi ?? ''),
-      outstanding: String(l.outstanding ?? ''),
-      startDate: l.startDate || '',
-    });
-    resetErrors();
-    setModal({ mode: 'edit', data: l });
-  };
-
-  const setPrincipal = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('principal', val, NUMERIC_RULES.principal);
-    setForm((f: any) => ({ ...f, principal: val }));
-  };
-  const setInterestRate = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('interestRate', val, NUMERIC_RULES.interestRate);
-    setForm((f: any) => ({ ...f, interestRate: val }));
-  };
-  const setTenureMonths = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('tenureMonths', val, NUMERIC_RULES.tenureMonths);
-    setForm((f: any) => ({ ...f, tenureMonths: val }));
-  };
-  const setEmi = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('emi', val, NUMERIC_RULES.emi);
-    setForm((f: any) => ({ ...f, emi: val }));
-  };
-  const setOutstanding = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('outstanding', val, NUMERIC_RULES.outstanding);
-    setForm((f: any) => ({ ...f, outstanding: val }));
-  };
-
-  const handleSubmit = () => {
-    const pErr = validate('principal', form.principal, NUMERIC_RULES.principal);
-    const rErr = validate('interestRate', form.interestRate, NUMERIC_RULES.interestRate);
-    const tErr = validate('tenureMonths', form.tenureMonths, NUMERIC_RULES.tenureMonths);
-    const eErr = validate('emi', form.emi, NUMERIC_RULES.emi);
-    const oErr = validate('outstanding', form.outstanding, NUMERIC_RULES.outstanding);
-    if (pErr || rErr || tErr || eErr || oErr) return;
-    if (!form.name.trim()) return;
-
-    const payload = {
-      ...form,
-      principal: Number(form.principal),
-      interestRate: Number(form.interestRate),
-      tenureMonths: Number(form.tenureMonths),
-      emi: Number(form.emi),
-      outstanding: Number(form.outstanding),
-    };
-    if (modal?.mode === 'add') dispatch({ type: 'ADD_LIABILITY', payload: { ...payload, id: uid() } });
-    else dispatch({ type: 'UPDATE_LIABILITY', payload: { ...payload, id: modal!.data.id } });
-    setModal(null);
-  };
+  const openAdd = () => setModal({ mode: 'add' });
+  const openEdit = (l: any) => setModal({ mode: 'edit', data: l });
 
   const handleDelete = (id: string) => {
     Alert.alert('Delete this liability?', undefined, [
@@ -136,7 +78,9 @@ export default function Liabilities() {
     ]);
   };
 
-  const totalOutstanding = liabilities.reduce((s: number, l: any) => s + Number(l.outstanding || 0), 0);
+  const totalOutstanding = liabilities.reduce((s: number, l: any) => s + st(l).outstanding, 0);
+  const activeLoans = liabilities.filter((l: any) => !st(l).closed);
+  const paidCount = activeLoans.filter((l: any) => st(l).paidThisMonth).length;
   const totalEmi = liabilities.reduce((s: number, l: any) => s + Number(l.emi || 0), 0);
   const totalPrincipal = liabilities.reduce((s: number, l: any) => s + Number(l.principal || 0), 0);
   const totalRepaid = totalPrincipal - totalOutstanding;
@@ -151,12 +95,34 @@ export default function Liabilities() {
       .filter((o: any) => o.count > 0 || o.key === filterType),
   ];
 
+  const note = state.household?.loanBackfillNote;
   const header = (
     <View style={styles.listHeader}>
+      {note ? (
+        <Card style={styles.noteCard}>
+          <Text style={styles.noteTitle}>{note.kind === 'subs' ? 'Your loans are now sub-categories' : note.linked > 0 ? `Balances updated from ${note.linked} past EMI payment${note.linked === 1 ? '' : 's'}` : 'Loan balances are now live'}</Text>
+          <Text style={styles.noteText}>
+            {note.kind === 'subs'
+              ? "Each loan now has its own entry in the sub-category list of the categories that track loans (like “<loan name> EMI”), replacing any generic one. Your past payments and budget lines were renamed and linked to the right loan, so nothing is lost."
+              : note.linked > 0
+              ? "We counted each loan's balance as of the day you added it, and matched your earlier loan/EMI expenses to the right loan. Open a loan to see its payments."
+              : "No earlier loan/EMI expenses matched a loan. Record EMIs (or pick the loan when adding an expense) and the balance will drop automatically."}
+            {' '}If you typed a balance later than you added the loan, edit the loan and set "Balance is as of" to that date.
+          </Text>
+          <Button title="Got it" size="sm" variant="secondary" onPress={() => dispatch({ type: 'UPDATE_HOUSEHOLD', payload: { loanBackfillNote: null } })} />
+        </Card>
+      ) : null}
+      {pendingPayments.length > 0 ? (
+        <Card style={styles.pendingCard}>
+          <Text style={styles.noteTitle}>{pendingPayments.length} loan payment{pendingPayments.length === 1 ? '' : 's'} need a loan</Text>
+          <Text style={styles.noteText}>They're recorded under {categoriesTracking(state, 'liability').map((x) => x.cat.name).join(', ') || 'a loan category'}, but I can't tell which loan they repaid. Assign them so each loan's balance is right — or mark them “Not a loan”.</Text>
+          <Button title="Review & assign" size="sm" onPress={() => setShowUnlinked(true)} />
+        </Card>
+      ) : null}
       <PageHero
         label="Total outstanding"
         value={fmt(totalOutstanding)}
-        sub={liabilities.length === 0 ? 'No loans tracked yet' : `EMI ${fmt(totalEmi)} / month • ${overallPct.toFixed(0)}% repaid overall`}
+        sub={liabilities.length === 0 ? 'No loans tracked yet' : `EMI ${fmt(totalEmi)} / month • ${paidCount} of ${activeLoans.length} paid this month • ${overallPct.toFixed(0)}% repaid`}
         stats={[
           { label: 'Principal', value: fmt(totalPrincipal) },
           { label: 'Repaid', value: fmt(totalRepaid) },
@@ -205,11 +171,12 @@ export default function Liabilities() {
         }
         renderItem={({ item: l }: { item: any }) => {
           const color = typeColors[l.type] || Colors.text2;
-          const paid = Number(l.principal || 0) - Number(l.outstanding || 0);
-          const pct = l.principal ? (paid / l.principal) * 100 : 0;
+          const s = st(l);
+          const paid = Number(l.principal || 0) - s.outstanding;
+          const pct = l.principal ? Math.max(0, Math.min((paid / l.principal) * 100, 100)) : 0;
           const ringColor = pct >= 75 ? Colors.green : pct >= 35 ? Colors.yellow : Colors.accentLight;
           return (
-            <Tap onPress={() => setDetail(l)} accessibilityLabel={`${l.name}, ${typeLabels[l.type] || l.type}, outstanding ${fmt(l.outstanding)}, ${pct.toFixed(0)} percent repaid. Tap for details`}>
+            <Tap onPress={() => setDetail(l)} accessibilityLabel={`${l.name}, ${typeLabels[l.type] || l.type}, outstanding ${fmt(s.outstanding)}, ${pct.toFixed(0)} percent repaid. Tap for details`}>
               <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: color }]}>
                 <View style={styles.topRow}>
                   <View style={{ flex: 1, flexShrink: 1 }}>
@@ -226,7 +193,7 @@ export default function Liabilities() {
                   <Ring pct={pct} color={ringColor} size={64} thickness={8} center={`${pct.toFixed(0)}%`} />
                   <View style={styles.figures}>
                     <Text style={styles.valueLabel}>Outstanding</Text>
-                    <Text style={styles.bigValue} numberOfLines={1} adjustsFontSizeToFit>{fmt(l.outstanding)}</Text>
+                    <Text style={styles.bigValue} numberOfLines={1} adjustsFontSizeToFit>{fmt(s.outstanding)}</Text>
                     <Text style={styles.metaText} numberOfLines={1}>of {fmt(l.principal)} • {pct.toFixed(0)}% repaid</Text>
                   </View>
                 </View>
@@ -245,42 +212,31 @@ export default function Liabilities() {
                     <Text style={styles.valueAmt} numberOfLines={1}>{l.tenureMonths} mo</Text>
                   </View>
                 </View>
+
+                {s.closed ? (
+                  <View style={[styles.statusChip, { backgroundColor: Colors.greenBg }]}>
+                    <CheckCircle2 size={15} color={Colors.green} /><Text style={[styles.statusText, { color: Colors.green }]}>Loan fully repaid 🎉</Text>
+                  </View>
+                ) : s.dueState ? (
+                  <View style={[styles.statusChip, { backgroundColor: s.dueState === 'paid' ? Colors.greenBg : s.dueState === 'overdue' ? Colors.yellowBg : Colors.panelHover }]}>
+                    {s.dueState === 'paid' ? <CheckCircle2 size={15} color={Colors.green} /> : <Clock size={15} color={s.dueState === 'overdue' ? Colors.yellow : Colors.text2} />}
+                    <Text style={[styles.statusText, { color: s.dueState === 'paid' ? Colors.green : s.dueState === 'overdue' ? Colors.yellow : Colors.text2 }]}>
+                      {s.dueState === 'paid'
+                        ? `This month's EMI recorded • next due ${s.dueDate}`
+                        : s.dueState === 'overdue'
+                          ? `EMI due ${s.dueDate} — no payment recorded yet`
+                          : `EMI due ${s.daysToDue === 0 ? 'today' : `in ${s.daysToDue} day${s.daysToDue === 1 ? '' : 's'}`} • ${s.dueDate}`}
+                    </Text>
+                  </View>
+                ) : null}
               </Card>
             </Tap>
           );
         }}
       />
 
-      {/* Add/Edit Liability Modal */}
-      {modal && (
-        <AppModal
-          visible
-          title={modal.mode === 'add' ? 'Add Liability' : 'Edit Liability'}
-          onClose={() => setModal(null)}
-          footer={
-            <View style={styles.actions}>
-              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-              <Button title={modal.mode === 'add' ? 'Add Liability' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-            </View>
-          }
-        >
-          <FormField label="Loan Name" value={form.name} onChangeText={(v) => setForm((f: any) => ({ ...f, name: v }))}
-            maxLength={MAX_NAME_LENGTH} placeholder="e.g. SBI Home Loan" />
-          <SelectField label="Type" value={form.type} onChange={(v) => setForm((f: any) => ({ ...f, type: v }))}
-            options={libTypes.map((t: any) => ({ label: t.label, value: t.key }))} />
-          <FormField label="Principal Amount (₹)" keyboardType="decimal-pad" value={form.principal}
-            onChangeText={setPrincipal} error={errors.principal} placeholder="0" />
-          <FormField label="Interest Rate (% p.a.)" keyboardType="decimal-pad" value={form.interestRate}
-            onChangeText={setInterestRate} error={errors.interestRate} placeholder="0" />
-          <FormField label="Tenure (months)" keyboardType="number-pad" value={form.tenureMonths}
-            onChangeText={setTenureMonths} error={errors.tenureMonths} placeholder="0" />
-          <FormField label="EMI Amount (₹)" keyboardType="decimal-pad" value={form.emi}
-            onChangeText={setEmi} error={errors.emi} placeholder="0" />
-          <DateField label="Start Date" value={form.startDate} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} />
-          <FormField label="Outstanding Balance (₹)" keyboardType="decimal-pad" value={form.outstanding}
-            onChangeText={setOutstanding} error={errors.outstanding} placeholder="0" />
-        </AppModal>
-      )}
+      {/* Add/Edit Liability — one shared form (also opened from the transaction form) */}
+      {modal && <LoanFormModal visible entity={modal.mode === 'edit' ? modal.data : undefined} onClose={() => setModal(null)} />}
 
       {/* Type Manager Modal */}
       {typeModal === 'manage' && (
@@ -327,19 +283,33 @@ export default function Liabilities() {
       {(() => {
         const l = detail ? liabilities.find((x: any) => x.id === detail.id) : null;
         if (!l) return null;
-        const paid = Number(l.principal || 0) - Number(l.outstanding || 0);
-        const pct = l.principal ? (paid / l.principal) * 100 : 0;
+        const s = st(l);
+        const paid = Number(l.principal || 0) - s.outstanding;
+        const pct = l.principal ? Math.max(0, Math.min((paid / l.principal) * 100, 100)) : 0;
         const linkedAsset = l.collateral ? (state.assets || []).find((a: any) => a.id === l.collateral)?.name : undefined;
+        const candidates = candidatePayments(l, typeLabels[l.type], transactions, liabilities.length, liabilities);
+        const candTotal = candidates.reduce((t: number, x: any) => t + Number(x.amount || 0), 0);
+        const emiCat = (state.expenseCategories || []).find((c: any) => /loan.*emi|emi/i.test(c.name)) || (state.expenseCategories || []).find((c: any) => /loan/i.test(c.name));
+        const emiSub = emiCat?.subcategories?.find((x: string) => x.toLowerCase() === String(typeLabels[l.type] || '').toLowerCase()) || '';
+        const startPay = () => setPayForm({
+          type: 'expense', amount: l.emi ? String(l.emi) : '', liabilityId: l.id, notes: `${l.name} EMI`,
+          category: emiCat?.name || '', group: emiCat?.group || '', subcategory: emiSub,
+        });
         return (
           <RecordSheet
             visible title={l.name} subtitle={typeLabels[l.type] || l.type}
-            headlineLabel="Outstanding" headline={fmt(l.outstanding)} headlineColor={Colors.red}
+            headlineLabel="Outstanding now" headline={fmt(s.outstanding)} headlineColor={s.closed ? Colors.green : Colors.red}
             progress={pct} progressColor={Colors.green} progressNote={`${pct.toFixed(0)}% repaid • ${fmt(paid)} of ${fmt(l.principal)}`}
             rows={[
               ['Original loan', fmt(l.principal)],
-              ['Repaid so far', fmt(paid)],
+              ['Balance you entered', `${fmt(s.baseline)} (as of ${s.asOf})`],
+              ['Principal repaid since', s.payments.length ? fmt(s.principalPaid) : undefined],
+              ['Interest paid since', s.payments.length ? fmt(s.interestPaid) : undefined],
+              ['Earlier payments (not counted)', s.earlierCount ? `${s.earlierCount} • ${fmt(s.earlierTotal)} — before ${s.asOf}` : undefined],
               ['Interest rate', l.interestRate ? `${l.interestRate}% p.a.` : undefined],
               ['Monthly EMI', l.emi ? fmt(l.emi) : undefined],
+              ['Next EMI due', s.dueState === 'paid' ? `${s.dueDate} (this month paid)` : s.dueDate],
+              ['Estimated months left', s.monthsLeft ? `${s.monthsLeft} months` : undefined],
               ['Tenure', l.tenureMonths ? `${l.tenureMonths} months` : undefined],
               ['Start date', l.startDate],
               ['Collateral', linkedAsset],
@@ -347,9 +317,71 @@ export default function Liabilities() {
             onClose={() => setDetail(null)}
             onEdit={() => { setDetail(null); setTimeout(() => openEdit(l), 250); }}
             onDelete={() => { setDetail(null); setTimeout(() => handleDelete(l.id), 250); }}
-          />
+          >
+            {!s.closed ? <Button title="Record EMI payment" icon={<Plus size={16} color="#fff" />} onPress={startPay} /> : null}
+
+            {candidates.length > 0 ? (
+              <View style={styles.linkCard}>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
+                  <Link2 size={16} color={Colors.accentLight} />
+                  <Text style={styles.linkTitle}>{candidates.length} earlier payment{candidates.length === 1 ? '' : 's'} look like this loan</Text>
+                </View>
+                <Text style={styles.linkSub}>{fmt(candTotal)} recorded as loan/EMI expenses and not linked to any loan. Link them to this loan.</Text>
+                <Button title={`Link ${candidates.length} payment${candidates.length === 1 ? '' : 's'}`} variant="secondary" size="sm"
+                  onPress={() => candidates.forEach((t: any) => dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...t, liabilityId: l.id, subcategory: l.subName || t.subcategory } }))} />
+              </View>
+            ) : null}
+
+            {s.earlierCount > 0 && !l.earlierOk ? (
+              <View style={styles.linkCard}>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
+                  <Clock size={16} color={Colors.accentLight} />
+                  <Text style={styles.linkTitle}>{s.earlierCount} payment{s.earlierCount === 1 ? '' : 's'} ({fmt(s.earlierTotal)}) dated before the balance date</Text>
+                </View>
+                <Text style={styles.linkSub}>The balance you entered is as of {s.asOf}. Was it the amount <Text style={{ fontWeight: '800', color: Colors.text1 }}>before</Text> these payments (count them), or already <Text style={{ fontWeight: '800', color: Colors.text1 }}>after</Text> them (leave them out)?</Text>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                  <Button title="Count them" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_LIABILITY', payload: { ...l, outstandingAsOf: s.earlierFrom || l.outstandingAsOf } })} />
+                  <Button title="Already included" variant="secondary" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_LIABILITY', payload: { ...l, earlierOk: true } })} />
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.payHeadRow}>
+              <Text style={styles.payHeading}>Payments since {s.asOf}</Text>
+              <Pressable onPress={() => setLinkFor(l)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Link a transaction to this loan">
+                <Text style={styles.payAll}>+ Link</Text>
+              </Pressable>
+              {s.payments.length > 0 ? (
+                <Pressable onPress={() => explorer.show(`${l.name} — payments`, s.payments.map((p) => p.txn), `Since ${s.asOf} • ${fmt(s.paidTotal)} paid`)} hitSlop={8} accessibilityRole="button">
+                  <Text style={styles.payAll}>See all ›</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {s.payments.length === 0 ? (
+              <Text style={styles.payEmpty}>No payments linked yet. Record an EMI payment (or choose this loan when adding an expense) and the balance will drop automatically.</Text>
+            ) : s.payments.slice(0, 12).map((p) => (
+              <Pressable key={p.txn.id} onPress={() => explorer.showTxn(p.txn)} style={styles.payRow} accessibilityRole="button"
+                accessibilityLabel={`Payment of ${fmt(p.txn.amount)} on ${p.txn.date}, balance after ${fmt(p.balanceAfter)}. Tap for the transaction`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.payDate}>{p.txn.date}</Text>
+                  <Text style={styles.payMeta}>{fmt(p.principal)} principal{p.interest > 0 ? ` • ${fmt(p.interest)} interest` : ''}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.payAmt}>{fmt(p.txn.amount)}</Text>
+                  <Text style={styles.payMeta}>balance {fmt(p.balanceAfter)}</Text>
+                </View>
+                <ChevronRight size={16} color={Colors.text3} />
+              </Pressable>
+            ))}
+          </RecordSheet>
         );
       })()}
+      {payForm && <TransactionFormModal visible mode="add" initial={payForm} onClose={() => setPayForm(null)} />}
+      {explorer.node}
+      <LinkPaymentsSheet kind="liability" entity={linkFor} visible={!!linkFor} onClose={() => setLinkFor(null)} />
+      <UnlinkedPaymentsSheet kind="liability" visible={showUnlinked} onClose={() => setShowUnlinked(false)} />
     </SafeAreaView>
   );
 }
@@ -373,6 +405,24 @@ const styles = createStyles(() => ({
   emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800' },
   emptyText: { color: Colors.text2, fontSize: FontSize.base, textAlign: 'center' },
   card: { gap: 4 },
+  pendingCard: { gap: Spacing.sm, backgroundColor: Colors.yellowBg, borderColor: Colors.yellow + '55' },
+  noteCard: { gap: Spacing.sm, backgroundColor: Colors.accentGlow, borderColor: Colors.accentLight + '55' },
+  noteTitle: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  noteText: { color: Colors.text2, fontSize: FontSize.sm, lineHeight: 18 },
+  statusChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm, paddingVertical: 8, paddingHorizontal: Spacing.md, borderRadius: Radius.md },
+  statusText: { flex: 1, fontSize: FontSize.sm, fontWeight: '700' },
+  asOfHint: { color: Colors.text2, fontSize: FontSize.sm, marginTop: -8, marginBottom: Spacing.lg },
+  linkCard: { gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.accentGlow },
+  linkTitle: { flex: 1, color: Colors.text1, fontWeight: '800', fontSize: FontSize.base },
+  linkSub: { color: Colors.text2, fontSize: FontSize.sm },
+  payHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
+  payAll: { color: Colors.accentLight, fontWeight: '800', fontSize: FontSize.base },
+  payHeading: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  payEmpty: { color: Colors.text2, fontSize: FontSize.base },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  payDate: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base },
+  payAmt: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.base },
+  payMeta: { color: Colors.text2, fontSize: FontSize.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   actionsRow: { flexDirection: 'row', gap: 0 },
   name: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.md },

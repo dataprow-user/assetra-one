@@ -1,65 +1,41 @@
 import RecordSheet from '../../components/RecordSheet';
+import TransactionFormModal from '../../components/TransactionFormModal';
+import PolicyFormModal from '../../components/entity/PolicyFormModal';
+import { useTxnExplorer } from '../../components/TxnExplorer';
+import LinkPaymentsSheet from '../../components/LinkPaymentsSheet';
+import UnlinkedPaymentsSheet, { unlinkedPayments } from '../../components/UnlinkedPayments';
+import { policyStatus, categoriesTracking } from '../../utils/entities';
 import React, { useState } from 'react';
 import { View, FlatList, Pressable, Alert } from 'react-native';
 import { Text } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Plus, Edit2, Trash2 } from 'lucide-react-native';
+import { Shield, Plus, Edit2, Trash2, CheckCircle2, Clock, ChevronRight } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
-import { Card, Button, Badge, EmptyState, AppModal, FormField, SelectField, DateField, ScreenHeader, PageHero, FilterChips, Tap } from '../../components/ui';
+import { Card, Button, Badge, EmptyState, ScreenHeader, PageHero, FilterChips, Tap } from '../../components/ui';
 import type { ChipOption } from '../../components/ui';
-import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
-import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
 
-// Ported from apps/web/src/pages/Insurance.jsx — same field set, same
-// day-count/badge logic for renewal reminders.
+// Ported from apps/web/src/pages/Insurance.jsx. Premium payments are linked to policies through transactions;
+// each policy's next-due date is derived from them (policyStatus).
 const INS_TYPES = ['life', 'health', 'vehicle', 'term'];
 const INS_COLORS: Record<string, string> = { get life() { return Colors.blue; }, get health() { return Colors.green; }, get vehicle() { return Colors.yellow; }, get term() { return Colors.accentLight; } };
-const FREQUENCIES = [{ label: 'Monthly', value: 'monthly' }, { label: 'Yearly', value: 'yearly' }];
 
-const emptyForm = () => ({ name: '', type: 'term', policyNo: '', premium: '', frequency: 'yearly', sumAssured: '', nextDue: '' });
-
-const PREMIUM_RULE = { label: 'Premium Amount', min: 1, max: MAX_AMOUNT };
-const SUM_ASSURED_RULE = { label: 'Sum Assured', min: 0, max: MAX_AMOUNT, required: false };
-
-const getDaysLeft = (dateStr: string) => {
-  if (!dateStr) return null;
-  return Math.ceil((+new Date(dateStr) - +new Date()) / 86400000);
-};
+const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 export default function Insurance() {
-  const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
-  const { insurance = [] } = state;
+  const { state, dispatch, fmt } = useApp();
+  const { insurance = [], transactions = [] } = state;
+  const st = (p: any) => policyStatus(p, transactions);
   const [detail, setDetail] = useState<any>(null);
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
-  const [form, setForm] = useState(emptyForm());
-  const { errors, validate, reset: resetErrors } = useFieldErrors();
+  const [payForm, setPayForm] = useState<any>(null);
+  const [showUnlinked, setShowUnlinked] = useState(false);
+  const [linkFor, setLinkFor] = useState<any>(null);
+  const explorer = useTxnExplorer();
+  const pendingPayments = unlinkedPayments(state, 'insurance');
 
-  const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
-  const openEdit = (p: any) => { setForm({ ...p, premium: String(p.premium ?? ''), sumAssured: String(p.sumAssured ?? '') }); resetErrors(); setModal({ mode: 'edit', data: p }); };
-
-  const setPremium = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('premium', val, PREMIUM_RULE);
-    setForm((f) => ({ ...f, premium: val }));
-  };
-  const setSumAssured = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('sumAssured', val, SUM_ASSURED_RULE);
-    setForm((f) => ({ ...f, sumAssured: val }));
-  };
-
-  const handleSubmit = () => {
-    const premiumErr = validate('premium', form.premium, PREMIUM_RULE);
-    const sumErr = validate('sumAssured', form.sumAssured, SUM_ASSURED_RULE);
-    if (premiumErr || sumErr) return;
-    if (!form.name.trim()) return;
-
-    const payload = { ...form, premium: Number(form.premium), sumAssured: Number(form.sumAssured || 0) };
-    if (modal?.mode === 'add') dispatch({ type: 'ADD_INSURANCE', payload: { ...payload, id: uid() } });
-    else dispatch({ type: 'UPDATE_INSURANCE', payload: { ...payload, id: modal!.data.id } });
-    setModal(null);
-  };
+  const openAdd = () => setModal({ mode: 'add' });
+  const openEdit = (p: any) => setModal({ mode: 'edit', data: p });
 
   const handleDelete = (id: string) => {
     Alert.alert('Delete this policy?', 'This cannot be undone.', [
@@ -75,15 +51,14 @@ export default function Insurance() {
   };
   const totalAnnual = insurance.reduce((s: number, p: any) => s + annualOf(p), 0);
   const totalCover = insurance.reduce((s: number, p: any) => s + Number(p.sumAssured || 0), 0);
-  const withDays = insurance.map((p: any) => ({ p, days: getDaysLeft(p.nextDue) }));
-  const upcoming = withDays.filter((x) => x.days !== null && x.days >= 0).map((x) => x.days as number);
+  const withStatus = insurance.map((p: any) => ({ p, s: st(p) }));
+  const upcoming = withStatus.filter((x: any) => x.s.daysToDue !== undefined && x.s.daysToDue >= 0).map((x: any) => x.s.daysToDue as number);
   const nextDueDays = upcoming.length ? Math.min(...upcoming) : null;
-  const hasOverdue = withDays.some((x) => x.days !== null && x.days < 0);
+  const hasOverdue = withStatus.some((x: any) => x.s.dueState === 'overdue');
   const nextDueText = nextDueDays !== null ? (nextDueDays === 0 ? 'Today' : `${nextDueDays} day${nextDueDays === 1 ? '' : 's'}`) : hasOverdue ? 'Overdue' : '—';
 
   const [filterType, setFilterType] = useState('all');
   const typeKeys = Array.from(new Set([...INS_TYPES, ...insurance.map((p: any) => String(p.type || '')).filter(Boolean)]));
-  const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   const chipOptions: ChipOption[] = [
     { key: 'all', label: 'All', count: insurance.length },
     ...typeKeys
@@ -93,13 +68,21 @@ export default function Insurance() {
   const sorted = [...insurance]
     .filter((p: any) => filterType === 'all' || p.type === filterType)
     .sort((x: any, y: any) => {
-      const dx = x.nextDue ? +new Date(x.nextDue) : Infinity;
-      const dy = y.nextDue ? +new Date(y.nextDue) : Infinity;
+      const nx = st(x).nextDue, ny = st(y).nextDue;
+      const dx = nx ? +new Date(nx) : Infinity;
+      const dy = ny ? +new Date(ny) : Infinity;
       return dx === dy ? 0 : dx < dy ? -1 : 1;
     });
 
   const header = (
     <View style={styles.listHeader}>
+      {pendingPayments.length > 0 ? (
+        <Card style={styles.pendingCard}>
+          <Text style={styles.noteTitle}>{pendingPayments.length} payment{pendingPayments.length === 1 ? '' : 's'} need a policy</Text>
+          <Text style={styles.noteText}>They're recorded under a category that tracks insurance, but I can't tell which policy they paid. Assign them so each policy's due date is right, or mark them "Not a premium".</Text>
+          <Button title="Review & assign" size="sm" onPress={() => setShowUnlinked(true)} />
+        </Card>
+      ) : null}
       <PageHero
         label="Annual premium"
         value={fmt(totalAnnual)}
@@ -124,7 +107,7 @@ export default function Insurance() {
         />
       </View>
 
-      <FlatList extraData={[fmt, filterType]}
+      <FlatList extraData={[fmt, filterType, transactions]}
         data={sorted}
         keyExtractor={(p: any) => p.id}
         contentContainerStyle={styles.listContent}
@@ -142,13 +125,16 @@ export default function Insurance() {
           )
         }
         renderItem={({ item: p }: { item: any }) => {
-          const daysLeft = getDaysLeft(p.nextDue);
+          const ps = st(p);
           const color = INS_COLORS[p.type] || Colors.text2;
-          const dueColor = daysLeft === null ? Colors.text2 : daysLeft < 0 ? Colors.red : daysLeft <= 7 ? Colors.red : daysLeft <= 30 ? Colors.yellow : Colors.green;
-          const dueLabel = daysLeft === null ? 'No date' : daysLeft < 0 ? 'Overdue' : daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+          const chipColor = ps.dueState === 'paid' ? Colors.green : ps.dueState === 'overdue' ? Colors.yellow : Colors.text2;
+          const dueLabel = ps.dueState === 'paid' ? `Premium paid • next due ${ps.nextDue}`
+            : ps.dueState === 'overdue' ? `Overdue since ${ps.nextDue} — no payment recorded yet`
+            : ps.dueState === 'upcoming' ? `Due ${ps.daysToDue === 0 ? 'today' : `in ${ps.daysToDue} day${ps.daysToDue === 1 ? '' : 's'}`} • ${ps.nextDue}`
+            : 'No due date set';
           return (
-            <Tap onPress={() => setDetail(p)} accessibilityLabel={`${p.name}, ${typeLabel(String(p.type || ''))} policy, premium ${fmt(p.premium)} ${p.frequency || ''}, ${dueLabel}. Tap for details`}>
-              <Card style={[styles.policyCard, { borderLeftWidth: 4, borderLeftColor: dueColor }]}>
+            <Tap onPress={() => setDetail(p)} accessibilityLabel={`${p.name}, ${typeLabel(String(p.type || ''))} policy, premium ${fmt(p.premium)} ${String(p.frequency || '').replace(/_/g, ' ')}, ${dueLabel}. Tap for details`}>
+              <Card style={[styles.policyCard, { borderLeftWidth: 4, borderLeftColor: color }]}>
                 <View style={styles.topRow}>
                   <View style={{ flex: 1, flexShrink: 1 }}>
                     <Text style={styles.policyName} numberOfLines={1}>{p.name}</Text>
@@ -176,11 +162,9 @@ export default function Insurance() {
                   </View>
                 </View>
 
-                <View style={styles.dueRow}>
-                  <View style={[styles.dueBadge, { backgroundColor: dueColor + '1f' }]}>
-                    <Text style={[styles.dueBadgeText, { color: dueColor }]} numberOfLines={1}>{dueLabel}</Text>
-                  </View>
-                  {p.nextDue ? <Text style={styles.dueDate} numberOfLines={1}>Next due {p.nextDue}</Text> : null}
+                <View style={[styles.statusChip, { backgroundColor: ps.dueState === 'paid' ? Colors.greenBg : ps.dueState === 'overdue' ? Colors.yellowBg : Colors.panelHover }]}>
+                  {ps.dueState === 'paid' ? <CheckCircle2 size={15} color={chipColor} /> : <Clock size={15} color={chipColor} />}
+                  <Text style={[styles.statusText, { color: chipColor }]}>{dueLabel}</Text>
                 </View>
               </Card>
             </Tap>
@@ -188,49 +172,90 @@ export default function Insurance() {
         }}
       />
 
-      {modal && (
-        <AppModal
-          visible
-          title={modal.mode === 'add' ? 'Add Insurance Policy' : 'Edit Policy'}
-          onClose={() => setModal(null)}
-          footer={
-            <View style={styles.actions}>
-              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-              <Button title={modal.mode === 'add' ? 'Add Policy' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-            </View>
-          }
-        >
-          <FormField label="Policy Name" value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} maxLength={MAX_NAME_LENGTH} placeholder="e.g. LIC Term Plan" />
-          <SelectField label="Type" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))}
-            options={INS_TYPES.map((t) => ({ label: t, value: t }))} />
-          <FormField label="Policy Number" value={form.policyNo} onChangeText={(v) => setForm((f) => ({ ...f, policyNo: v }))} maxLength={MAX_SHORT_LENGTH} placeholder="LIC-XXXXX" />
-          <FormField label="Premium Amount (₹)" keyboardType="numbers-and-punctuation" value={form.premium} onChangeText={setPremium} error={errors.premium} placeholder="0" />
-          <SelectField label="Frequency" value={form.frequency} onChange={(v) => setForm((f) => ({ ...f, frequency: v }))} options={FREQUENCIES} />
-          <FormField label="Sum Assured (₹)" keyboardType="numbers-and-punctuation" value={form.sumAssured} onChangeText={setSumAssured} error={errors.sumAssured} placeholder="0" />
-          <DateField label="Next Due Date" value={form.nextDue} onChange={(v) => setForm((f) => ({ ...f, nextDue: v }))} />
-        </AppModal>
-      )}
+      <PolicyFormModal
+        visible={!!modal}
+        entity={modal?.mode === 'edit' ? modal.data : undefined}
+        onClose={() => setModal(null)}
+      />
       {(() => {
         const p = detail ? insurance.find((x: any) => x.id === detail.id) : null;
         if (!p) return null;
-        const dl = getDaysLeft(p.nextDue);
+        const s = st(p);
+        const insCat = categoriesTracking(state, 'insurance').find((x) => x.txnType === 'expense')?.cat;
+        const startPay = () => setPayForm({
+          type: 'expense', category: insCat?.name || '', group: insCat?.group || '', subcategory: p.subName || '',
+          policyId: p.id, amount: String(p.premium || ''), notes: p.name,
+        });
         return (
           <RecordSheet
             visible title={p.name} subtitle={`${String(p.type || '').replace(/_/g, ' ')} insurance`}
-            headlineLabel={`Premium (${p.frequency || 'per term'})`} headline={fmt(p.premium)}
+            headlineLabel={`Premium (${String(p.frequency || 'per term').replace(/_/g, ' ')})`} headline={fmt(p.premium)}
             rows={[
               ['Policy number', p.policyNo],
               ['Sum assured', p.sumAssured ? fmt(p.sumAssured) : undefined],
-              ['Premium frequency', p.frequency],
-              ['Next due date', p.nextDue],
-              ['Due in', dl === null ? undefined : dl < 0 ? `Overdue by ${-dl} day${-dl === 1 ? '' : 's'}` : dl === 0 ? 'Today' : `${dl} day${dl === 1 ? '' : 's'}`],
+              ['Premium frequency', p.frequency ? typeLabel(String(p.frequency)) : undefined],
+              ['Next due date', s.nextDue],
+              ['Status', s.dueState === 'overdue' ? `Overdue since ${s.nextDue}` : s.dueState === 'paid' ? 'Premium paid' : s.daysToDue === undefined ? undefined : s.daysToDue === 0 ? 'Due today' : `Due in ${s.daysToDue} day${s.daysToDue === 1 ? '' : 's'}`],
+              ['Last paid', s.lastPaid],
+              [`Total paid since ${s.asOf}`, s.payments.length ? fmt(s.paidTotal) : undefined],
+              ['Earlier payments (not counted)', s.earlierCount ? `${s.earlierCount} • ${fmt(s.earlierTotal)} — before ${s.asOf}` : undefined],
             ]}
             onClose={() => setDetail(null)}
             onEdit={() => { setDetail(null); setTimeout(() => openEdit(p), 250); }}
             onDelete={() => { setDetail(null); setTimeout(() => handleDelete(p.id), 250); }}
-          />
+          >
+            {insCat ? (
+              <Button title="Record premium payment" icon={<Plus size={16} color="#fff" />} onPress={startPay} />
+            ) : (
+              <Text style={styles.payEmpty}>To record premiums here, open Categories and choose which expense category tracks insurance.</Text>
+            )}
+
+            {s.earlierCount > 0 && !p.earlierOk ? (
+              <View style={styles.linkCard}>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
+                  <Clock size={16} color={Colors.accentLight} />
+                  <Text style={styles.linkTitle}>{s.earlierCount} payment{s.earlierCount === 1 ? '' : 's'} ({fmt(s.earlierTotal)}) dated before the due date was set</Text>
+                </View>
+                <Text style={styles.linkSub}>The due date you entered is as of {s.asOf}. Was it the date <Text style={{ fontWeight: '800', color: Colors.text1 }}>before</Text> these payments (count them), or already <Text style={{ fontWeight: '800', color: Colors.text1 }}>after</Text> them (leave them out)?</Text>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                  <Button title="Count them" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_INSURANCE', payload: { ...p, nextDueAsOf: s.earlierFrom || p.nextDueAsOf } })} />
+                  <Button title="Already included" variant="secondary" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_INSURANCE', payload: { ...p, earlierOk: true } })} />
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.payHeadRow}>
+              <Text style={styles.payHeading}>Premium payments since {s.asOf}</Text>
+              <Pressable onPress={() => setLinkFor(p)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Link a payment to this policy">
+                <Text style={styles.payAll}>+ Link</Text>
+              </Pressable>
+              {s.payments.length > 0 ? (
+                <Pressable onPress={() => explorer.show(`${p.name} — premiums`, s.payments, `Since ${s.asOf} • ${fmt(s.paidTotal)} paid`)} hitSlop={8} style={styles.seeAll} accessibilityRole="button" accessibilityLabel={`See all premium payments for ${p.name}`}>
+                  <Text style={styles.payAll}>See all ›</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {s.payments.length === 0 ? (
+              <Text style={styles.payEmpty}>No premium payments linked yet. Record a premium (or choose this policy when adding an expense) and the next due date will move forward automatically.</Text>
+            ) : s.payments.slice(0, 12).map((t: any) => (
+              <Pressable key={t.id} onPress={() => explorer.showTxn(t)} style={styles.payRow} accessibilityRole="button"
+                accessibilityLabel={`Premium of ${fmt(t.amount)} on ${String(t.date).slice(0, 10)}. Tap for the transaction`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.payDate}>{String(t.date).slice(0, 10)}</Text>
+                </View>
+                <Text style={styles.payAmt}>{fmt(t.amount)}</Text>
+                <ChevronRight size={16} color={Colors.text3} />
+              </Pressable>
+            ))}
+          </RecordSheet>
         );
       })()}
+      {payForm && <TransactionFormModal visible mode="add" initial={payForm} onClose={() => setPayForm(null)} />}
+      {explorer.node}
+      <LinkPaymentsSheet kind="insurance" entity={linkFor} visible={!!linkFor} onClose={() => setLinkFor(null)} />
+      <UnlinkedPaymentsSheet kind="insurance" visible={showUnlinked} onClose={() => setShowUnlinked(false)} />
     </SafeAreaView>
   );
 }
@@ -240,10 +265,24 @@ const styles = createStyles(() => ({
   headerWrap: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
   listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
   listHeader: { gap: Spacing.md, marginTop: Spacing.sm, marginBottom: Spacing.xs },
-  miniBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  miniBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   statCol: { flex: 1, flexShrink: 1 },
-  dueBadge: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.pill },
-  dueBadgeText: { fontSize: FontSize.sm, fontWeight: '800' },
+  statusChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 8, paddingHorizontal: Spacing.md, borderRadius: Radius.md },
+  statusText: { flex: 1, fontSize: FontSize.sm, fontWeight: '700' },
+  pendingCard: { gap: Spacing.sm, backgroundColor: Colors.yellowBg, borderColor: Colors.yellow + '55' },
+  noteTitle: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  noteText: { color: Colors.text2, fontSize: FontSize.sm, lineHeight: 18 },
+  linkCard: { gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.accentGlow },
+  linkTitle: { flex: 1, color: Colors.text1, fontWeight: '800', fontSize: FontSize.base },
+  linkSub: { color: Colors.text2, fontSize: FontSize.sm },
+  payHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
+  seeAll: { minHeight: 44, justifyContent: 'center' },
+  payAll: { color: Colors.accentLight, fontWeight: '800', fontSize: FontSize.base },
+  payHeading: { flex: 1, color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  payEmpty: { color: Colors.text2, fontSize: FontSize.base },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 48, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  payDate: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base },
+  payAmt: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.base },
   emptyCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
   emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { color: Colors.text1, fontSize: FontSize.md, fontWeight: '800' },
@@ -258,7 +297,4 @@ const styles = createStyles(() => ({
   statLabel: { fontSize: FontSize.sm, color: Colors.text2 },
   premiumValue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.red, marginTop: 2 },
   sumValue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text1, marginTop: 2 },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
-  dueDate: { fontSize: FontSize.sm, color: Colors.text2 },
-  actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
 }));

@@ -9,6 +9,7 @@ import { Card, Button, AppModal, FormField, SelectField, ScreenHeader, PageHero,
 import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius, GroupColors, createStyles } from '../../constants/theme';
 import { MAX_NOTES_LENGTH, MAX_AMOUNT, sanitizeNumericInput } from '../../utils/validation';
+import { currentBudgetMonth, getBudgetCycle, getYearWindow, inRange } from '../../utils/budgetPeriod';
 import { parseYMD } from '../../utils/budgetPeriod';
 
 // Ported from apps/web/src/pages/Budgets.jsx — card view + single Add/Edit
@@ -35,9 +36,10 @@ export default function Budgets() {
   const router = useRouter();
 
   // Month / Year navigation
-  const now = new Date();
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
-  const [viewYear, setViewYear] = useState(now.getFullYear());
+  // Open on the budget month we're actually in — after payday that's already next month.
+  const initialBudgetMonth = currentBudgetMonth(state);
+  const [viewMonth, setViewMonth] = useState(initialBudgetMonth.month);
+  const [viewYear, setViewYear] = useState(initialBudgetMonth.year);
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
 
   const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); } else setViewMonth((m) => m - 1); };
@@ -113,12 +115,12 @@ export default function Budgets() {
   const categoryCount = new Set(viewBudgets.map((b: any) => b.category)).size;
 
   // Spent in the selected period (expense transactions), for the hero.
+  // Spent follows the salary cycle (28 Oct → 27 Nov counts as November).
+  const win = viewMode === 'month' ? getBudgetCycle(state, viewYear, viewMonth) : getYearWindow(state, viewYear);
   const totalSpent = useMemo(() => transactions.reduce((s: number, t: any) => {
-    if (t.type !== 'expense') return s;
-    const ymd = parseYMD(t.date);
-    if (ymd.year !== viewYear || (viewMode === 'month' && ymd.month !== viewMonth)) return s;
+    if (t.type !== 'expense' || !inRange(t.date, win.start, win.end)) return s;
     return s + Number(t.amount || 0);
-  }, 0), [transactions, viewMonth, viewYear, viewMode]);
+  }, 0), [transactions, win.start, win.end]);
   const remaining = totalPlanned - totalSpent;
   const usedPct = totalPlanned > 0 ? Math.round((totalSpent / totalPlanned) * 100) : 0;
 

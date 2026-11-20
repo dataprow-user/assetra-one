@@ -9,6 +9,7 @@ import {
   Target, Landmark, ShieldCheck, CalendarDays, Tags, PieChart as PieChartIcon, Sparkles,
 } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
+import HomeInsights from '../../../components/insights/HomeInsights';
 import { Card, ProgressBar, EmptyState, DateField, Tap, Button, Sheet, BudgetBar, budgetTone } from '../../../components/ui';
 import AuroraWash from '../../../components/ui/AuroraWash';
 import SearchModal from '../../../components/SearchModal';
@@ -18,7 +19,9 @@ import Ring from '../../../components/charts/Ring';
 import { HeroBackdrop } from '../../../components/ui/PageHero';
 import { useTxnExplorer } from '../../../components/TxnExplorer';
 import { Colors, FontSize, Spacing, Radius, createStyles } from '../../../constants/theme';
-import { getSalaryCutoff, budgetMonthOf, sameYM } from '../../../utils/budgetPeriod';
+import { loanStatus } from '../../../utils/loans';
+import { assetStatus, policyStatus } from '../../../utils/entities';
+import { getBudgetCycle, currentBudgetMonth, rangePace, inRange, cycleRangeLabel } from '../../../utils/budgetPeriod';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -42,8 +45,8 @@ export default function Dashboard() {
   }, [amountsHidden]);
   const { transactions = [], accounts = [], assets = [], liabilities = [], budgets = [], insurance = [] } = state;
 
-  const totalAssets = assets.reduce((s: number, a: any) => s + (a.quantity * a.currentPrice), 0);
-  const totalLiabilities = liabilities.reduce((s: number, l: any) => s + Number(l.outstanding || 0), 0);
+  const totalAssets = assets.reduce((s: number, a: any) => s + assetStatus(a, transactions).current, 0);
+  const totalLiabilities = liabilities.reduce((s: number, l: any) => s + loanStatus(l, transactions).outstanding, 0);
   const netWorth = totalAssets - totalLiabilities;
   const inHand = accounts
     .filter((a: any) => ['bank', 'cash', 'wallet'].includes(a.type))
@@ -61,19 +64,22 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState(calendarMonthStartISO);
   const [customTo, setCustomTo] = useState(todayISO);
 
-  const periodStart = rangeMode === 'custom' ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
-  const periodEndRaw = rangeMode === 'custom' ? new Date(customTo) : now;
-  const periodEnd = new Date(periodEndRaw.getFullYear(), periodEndRaw.getMonth(), periodEndRaw.getDate(), 23, 59, 59, 999);
-  const periodLabel = rangeMode === 'month' ? `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` : `${customFrom} to ${customTo}`;
+  // "This month" is the BUDGET month we're in: it starts on the salary-credit
+  // day (28 Oct for November) and runs to the day before the next one, so
+  // spending right after payday counts toward the month it was budgeted for.
+  const budgetMonth = currentBudgetMonth(state, now);
+  const cycle = getBudgetCycle(state, budgetMonth.year, budgetMonth.month);
+  const winStart = rangeMode === 'custom' ? customFrom : cycle.start;
+  const winEnd = rangeMode === 'custom' ? customTo : (cycle.end < localISO(now) ? cycle.end : localISO(now));
+  const periodStart = rangeMode === 'custom' ? new Date(customFrom) : new Date(budgetMonth.year, budgetMonth.month, 1);
+  const periodEnd = new Date(new Date(winEnd).getFullYear(), new Date(winEnd).getMonth(), new Date(winEnd).getDate(), 23, 59, 59, 999);
+  const cycleNote = rangeMode === 'month' && cycle.start.slice(8) !== '01' ? cycleRangeLabel(cycle) : '';
+  const periodLabel = rangeMode === 'month'
+    ? `${MONTH_NAMES[budgetMonth.month]} ${budgetMonth.year}${cycleNote ? ` (${cycleNote})` : ''}`
+    : `${customFrom} to ${customTo}`;
 
-  const thisMonthTxns = transactions.filter((t: any) => { const d = new Date(t.date); return d >= periodStart && d <= periodEnd; });
-  // "This Month" income follows the salary rule (month-end salary counts toward
-  // the NEXT month — see utils/budgetPeriod); a custom range is date-exact.
-  const salaryCutoff = getSalaryCutoff(state);
-  const nowYM = { year: now.getFullYear(), month: now.getMonth() };
-  const incomeTxns = rangeMode === 'month'
-    ? transactions.filter((t: any) => t.type === 'income' && sameYM(budgetMonthOf(t, salaryCutoff), nowYM))
-    : thisMonthTxns.filter((t: any) => t.type === 'income');
+  const thisMonthTxns = transactions.filter((t: any) => inRange(t.date, winStart, winEnd));
+  const incomeTxns = thisMonthTxns.filter((t: any) => t.type === 'income');
   const expenseTxns = thisMonthTxns.filter((t: any) => t.type === 'expense');
   const monthIncome = incomeTxns.reduce((s: number, t: any) => s + t.amount, 0);
   const monthExpense = expenseTxns.reduce((s: number, t: any) => s + t.amount, 0);
@@ -82,7 +88,8 @@ export default function Dashboard() {
   // including every month it touches (e.g. a 25th-Jul→24th-Aug range pulls in
   // both July's and August's budgeted categories).
   const periodMonths: { month: string; year: number }[] = [];
-  {
+  if (rangeMode === 'month') periodMonths.push({ month: MONTH_NAMES[budgetMonth.month], year: budgetMonth.year });
+  else {
     let d = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
     const last = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1);
     while (d <= last) { periodMonths.push({ month: MONTH_NAMES[d.getMonth()], year: d.getFullYear() }); d.setMonth(d.getMonth() + 1); }
@@ -107,12 +114,12 @@ export default function Dashboard() {
 
   const openBudgetDetail = (category?: string, status?: string) => router.push({
     pathname: '/(app)/budget-vs-spent' as any, // typed-routes file regenerates on next `expo start`
-    params: { month: String(periodStart.getMonth()), year: String(periodStart.getFullYear()), ...(category ? { category } : {}), ...(status ? { status } : {}) },
+    params: { month: String(rangeMode === 'month' ? budgetMonth.month : periodStart.getMonth()), year: String(rangeMode === 'month' ? budgetMonth.year : periodStart.getFullYear()), ...(category ? { category } : {}), ...(status ? { status } : {}) },
   });
 
   // ── "Safe to spend today": what's left (budget if set, else income), spread over the days remaining ──
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysLeft = daysInMonth - now.getDate() + 1;
+  const pacing = rangeMode === 'month' ? rangePace(cycle.start, cycle.end, now) : undefined;
+  const daysLeft = pacing && pacing.kind === 'current' ? pacing.daysLeft : Math.max(1, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1);
   const usingBudget = monthBudgeted > 0;
   const pool = usingBudget ? monthBudgeted - monthExpense : monthIncome - monthExpense;
   const perDay = pool > 0 ? pool / daysLeft : 0;
@@ -143,6 +150,7 @@ export default function Dashboard() {
   const week7Total = last7.reduce((s, d) => s + d.total, 0);
 
   const quickActions = [
+    { label: 'Insights', route: '/(app)/insights', Icon: PieChartIcon, color: Colors.accent2 },
     { label: 'Budget vs Spent', route: '/(app)/budget-vs-spent', Icon: PieChartIcon, color: Colors.accentLight },
     { label: 'Budgets', route: '/(app)/budgets', Icon: Target, color: Colors.blue },
     { label: 'Assets', route: '/(app)/assets', Icon: TrendingUp, color: Colors.green },
@@ -155,7 +163,7 @@ export default function Dashboard() {
   const recentTxns = [...transactions].sort((a: any, b: any) => +new Date(b.date) - +new Date(a.date)).slice(0, 6);
 
   const upcomingInsurance = insurance
-    .map((p: any) => ({ ...p, daysLeft: Math.ceil((+new Date(p.nextDue) - +now) / 86400000) }))
+    .map((p: any) => { const ps = policyStatus(p, transactions, now); return { ...p, nextDue: ps.nextDue || p.nextDue, daysLeft: ps.daysToDue ?? Infinity }; })
     .filter((p: any) => p.daysLeft >= 0 && p.daysLeft <= 60)
     .sort((a: any, b: any) => a.daysLeft - b.daysLeft);
 
@@ -176,8 +184,8 @@ export default function Dashboard() {
   budgetCards.forEach((c: any) => { budgetCounts[c.raw > 100 ? 'over' : c.raw >= 80 ? 'near' : 'ok']++; });
 
   // Pace: how far through the month are we vs how much budget is gone?
-  const paceFrac = rangeMode === 'month' ? now.getDate() / daysInMonth : undefined;
-  const projectedSpend = rangeMode === 'month' ? (monthExpense / Math.max(now.getDate(), 1)) * daysInMonth : monthExpense;
+  const paceFrac = pacing && pacing.kind === 'current' ? pacing.elapsed : undefined;
+  const projectedSpend = pacing && pacing.kind === 'current' ? (monthExpense / Math.max(pacing.daysElapsed, 1)) * pacing.daysTotal : monthExpense;
   const paceUnder = projectedSpend <= monthBudgeted;
   const paceLine = rangeMode === 'month' && monthBudgeted > 0 && monthExpense > 0
     ? (paceUnder ? `On pace to finish ${fmt(monthBudgeted - projectedSpend)} under` : `On pace to overshoot by ${fmt(projectedSpend - monthBudgeted)}`)
@@ -297,6 +305,9 @@ export default function Dashboard() {
             <Text style={[styles.periodPillText, rangeMode === 'custom' && styles.periodPillTextActive]}>Custom Range</Text>
           </Pressable>
         </View>
+        {rangeMode === 'month' && cycleNote ? (
+          <Text style={styles.cycleCaption}>{MONTH_NAMES[budgetMonth.month]} budget month • {cycleNote} • starts on your salary day</Text>
+        ) : null}
         {rangeMode === 'custom' && (
           <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
             <DateField label="From" value={customFrom} onChange={setCustomFrom} maximumDate={new Date()} style={{ flex: 1 }} />
@@ -391,6 +402,8 @@ export default function Dashboard() {
             {maxDay > 0 ? `Highest: ${peak.long} • ${fmt(peak.total)} — tap a bar to see why` : 'No spending in the last 7 days.'}
           </Text>
         </Card>
+
+        <HomeInsights />
 
         {/* Recent */}
         <View style={styles.sectionHead}>
@@ -635,6 +648,7 @@ const styles = createStyles(() => ({
   quickIcon: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   quickLabel: { color: Colors.text2, fontSize: FontSize.xs, fontWeight: '700', textAlign: 'center' },
 
+  cycleCaption: { color: Colors.text2, fontSize: FontSize.sm, fontWeight: '600', marginTop: -4 },
   periodRow: { flexDirection: 'row', gap: Spacing.sm },
   periodPill: { flex: 1, minHeight: 40, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.panel, borderWidth: 1, borderColor: Colors.border },
   periodPillActive: { backgroundColor: 'rgba(79,70,229,0.18)', borderColor: 'rgba(79,70,229,0.45)' },

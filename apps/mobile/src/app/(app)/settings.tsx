@@ -16,6 +16,7 @@ import { getDriveAuth, disconnectDrive, uploadToDrive, useGoogleDriveConnect } f
 import { exportJSON, exportCSV, exportExcel, exportReport, pickBackupJson } from '../../utils/dataTransfer';
 import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
 import AppearanceCard from '../../components/AppearanceCard';
+import BudgetCycleCard from '../../components/BudgetCycleCard';
 import PinSetupModal from '../../components/PinSetupModal';
 import { hasPin as checkHasPin, clearPin } from '../../utils/appLock';
 import { saveSafetySnapshot, getSafetySnapshotMeta, loadSafetySnapshot } from '../../utils/safetySnapshot';
@@ -323,6 +324,8 @@ export default function Settings() {
         <ScreenHeader title="Settings" subtitle="Manage your household, data, backup and account preferences" showBack hideEye />
 
         <AppearanceCard />
+
+        <BudgetCycleCard />
 
         {/* App Lock */}
         <Card style={styles.section}>

@@ -4,7 +4,7 @@ import { Text } from '../../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  TrendingUp, CreditCard, PieChart, CalendarDays, Shield, Tags, Settings as SettingsIcon, ChevronRight, LogOut, Target, Sparkles,
+  TrendingUp, CreditCard, PieChart, CalendarDays, Shield, Tags, Settings as SettingsIcon, ChevronRight, LogOut, Target, Sparkles, BarChart3,
 } from 'lucide-react-native';
 import { useApp } from '../../../context/AppContext';
 import { Card, Tap } from '../../../components/ui';
@@ -36,6 +36,7 @@ export default function More() {
     {
       title: 'Planning',
       items: [
+        { id: 'insights', route: '/(app)/insights', label: 'Insights', desc: 'Explore & slice your money any way', icon: BarChart3, color: Colors.accent2 },
         { id: 'budgets', route: '/(app)/budgets', label: 'Budgets', desc: 'Plan monthly & yearly spending', icon: Target, color: Colors.accentLight, badge: monthBudgets ? `${monthBudgets} this month` : undefined },
         { id: 'budget-vs-spent', route: '/(app)/budget-vs-spent', label: 'Budget vs Spent', desc: 'See where you are over or under', icon: PieChart, color: Colors.blue },
         { id: 'events', route: '/(app)/events', label: 'Events', desc: 'Trips, functions & occasions', icon: CalendarDays, color: Colors.accent2, badge: events.length ? String(events.length) : undefined },

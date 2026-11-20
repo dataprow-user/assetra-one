@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Trash2, Edit2, Tag, X, ChevronDown, ChevronRight, Layers, Check } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { Card, Button, AppModal, FormField, SelectField, ScreenHeader, FilterChips } from '../../components/ui';
+import { KIND_CONFIG, KINDS, Kind } from '../../utils/entities';
 import { Colors, FontSize, Spacing, Radius, GroupColors, createStyles } from '../../constants/theme';
 import { MAX_NAME_LENGTH } from '../../utils/validation';
 import { DEFAULT_GROUPS } from '../../data/categories';
@@ -23,7 +24,7 @@ export default function CategoryManager() {
   const [tab, setTab] = useState<Tab>('expense');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [modal, setModal] = useState<'add-cat' | 'edit-cat' | 'add-group' | 'edit-group' | null>(null);
-  const [catForm, setCatForm] = useState<any>({ name: '', group: 'Needs' });
+  const [catForm, setCatForm] = useState<any>({ name: '', group: 'Needs', tracks: '' });
   const [groupForm, setGroupForm] = useState<any>({ name: '' });
   const [newSubInput, setNewSubInput] = useState<Record<string, string>>({});
   const [editingSub, setEditingSub] = useState<{ catId: string; value: string } | null>(null);
@@ -38,12 +39,12 @@ export default function CategoryManager() {
   const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
   // ── Add / Edit Category ──
-  const openAddCat = () => { setCatForm({ name: '', group: 'Needs' }); setModal('add-cat'); };
+  const openAddCat = () => { setCatForm({ name: '', group: 'Needs', tracks: '' }); setModal('add-cat'); };
   const openEditCat = (cat: any) => { setCatForm({ ...cat }); setModal('edit-cat'); };
   const handleCatSubmit = () => {
     if (!catForm.name.trim()) return;
     if (modal === 'add-cat') dispatch({ type: ADD_TYPE, payload: { ...catForm, id: uid(), subcategories: [] } });
-    else dispatch({ type: UPD_TYPE, payload: catForm });
+    else dispatch({ type: UPD_TYPE, payload: { ...catForm, tracks: catForm.tracks || '' } });
     setModal(null);
   };
   const handleDeleteCat = (id: string) => {
@@ -168,6 +169,11 @@ export default function CategoryManager() {
                     <View style={styles.subCountBadge}>
                       <Text style={styles.subCountText}>{cat.subcategories.length} subs</Text>
                     </View>
+                    {cat.tracks && KIND_CONFIG[cat.tracks as Kind] ? (
+                      <View style={[styles.subCountBadge, { backgroundColor: Colors.accentGlow }]}>
+                        <Text style={[styles.subCountText, { color: Colors.accentLight }]}>tracks {KIND_CONFIG[cat.tracks as Kind].noun}s</Text>
+                      </View>
+                    ) : null}
                   </Pressable>
                   <View style={styles.catRowActions}>
                     <Pressable onPress={() => openEditCat(cat)} hitSlop={4} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}><Edit2 size={16} color={Colors.text2} /></Pressable>
@@ -291,6 +297,22 @@ export default function CategoryManager() {
             <SelectField label="Group" value={catForm.group} onChange={(v) => setCatForm((f: any) => ({ ...f, group: v }))}
               options={groups.map((g: any) => ({ label: g.name, value: g.name }))} />
           )}
+          <SelectField
+            label="This category tracks"
+            hint="(optional)"
+            value={catForm.tracks || ''}
+            onChange={(v) => setCatForm((f: any) => ({ ...f, tracks: v }))}
+            options={[
+              { label: 'Nothing — an ordinary category', value: '' },
+              ...KINDS.filter((k) => KIND_CONFIG[k].txnTypes.includes(tab === 'income' ? 'income' : 'expense'))
+                .map((k: Kind) => ({ label: k === 'liability' ? 'Loans (EMIs & repayments)' : k === 'asset' ? (tab === 'income' ? 'Assets (money taken out / redeemed)' : 'Assets (money put in)') : 'Insurance (premiums)', value: k })),
+            ]}
+          />
+          {catForm.tracks ? (
+            <Text style={styles.trackHint}>
+              Each {KIND_CONFIG[catForm.tracks as Kind]?.noun} you add in {catForm.tracks === 'liability' ? 'Liabilities' : catForm.tracks === 'asset' ? 'Assets' : 'Insurance'} automatically appears in this category's sub-category list, and transactions you pick it for update that {KIND_CONFIG[catForm.tracks as Kind]?.noun}'s details.
+            </Text>
+          ) : null}
         </AppModal>
       )}
 
@@ -334,6 +356,7 @@ const styles = createStyles(() => ({
   catRowHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm, minHeight: 48 },
   catRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1, minHeight: 48 },
   catName: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base, flexShrink: 1 },
+  trackHint: { color: Colors.text2, fontSize: FontSize.sm, marginTop: -8, marginBottom: Spacing.lg },
   subCountBadge: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: Radius.pill, backgroundColor: Colors.panelHover },
   subCountText: { color: Colors.text2, fontSize: FontSize.xs, fontWeight: '600' },
   catRowActions: { flexDirection: 'row', gap: Spacing.xs },

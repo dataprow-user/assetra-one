@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useReducer, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { backfillLoans } from '../utils/loans';
+import { syncAllEntitySubcategories, backfillEntityDates } from '../utils/entities';
 import {
   SEED_TRANSACTIONS, SEED_ACCOUNTS, SEED_ASSETS,
   SEED_LIABILITIES, SEED_BUDGETS, SEED_EVENTS, SEED_INSURANCE, SEED_USERS,
@@ -70,13 +72,45 @@ const LEGACY_CATEGORY_NAMES = ['Chennai Home', 'Vellore Home', 'Kallakurichi Hom
 const hasLegacyCategories = (categories: any) =>
   Array.isArray(categories) && categories.some((c) => LEGACY_CATEGORY_NAMES.includes(c.name));
 
+const synced = (st: any) => syncAllEntitySubcategories(st).state;
+
 function normalizeLoaded(saved: any) {
   if (!saved.expenseCategories || hasLegacyCategories(saved.expenseCategories)) saved.expenseCategories = DEFAULT_EXPENSE_CATEGORIES;
   if (!saved.incomeCategories || hasLegacyCategories(saved.incomeCategories)) saved.incomeCategories = DEFAULT_INCOME_CATEGORIES;
   if (!saved.groups) saved.groups = DEFAULT_GROUPS;
   if (!saved.assetTypes) saved.assetTypes = DEFAULT_ASSET_TYPES;
   if (!saved.liabilityTypes) saved.liabilityTypes = DEFAULT_LIABILITY_TYPES;
-  return saved;
+  // A loan's typed balance is true "as of" a date; repayments recorded after it reduce it.
+  // Loans saved before this existed are treated as accurate today, so nothing is double-counted.
+  if (Array.isArray(saved.liabilities)) {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    saved.liabilities = saved.liabilities.map((l: any) => (l.outstandingAsOf ? l : { ...l, outstandingAsOf: today }));
+  }
+  // One-time backfill: take each loan's balance as true on the day it was added and link the
+  // earlier EMI expenses that clearly belong to it, so balances catch up with real payments.
+  if (!saved.household?.loanBackfillV1) {
+    let note: any = null;
+    if (Array.isArray(saved.liabilities) && saved.liabilities.length > 0) {
+      const r = backfillLoans(saved);
+      saved.liabilities = r.liabilities;
+      saved.transactions = r.transactions;
+      note = { linked: r.linked };
+    }
+    saved.household = { ...(saved.household || {}), loanBackfillV1: true, loanBackfillNote: note };
+  }
+  // One-time: an asset's / policy's typed figures are taken as true on the day it was added.
+  if (!saved.household?.entityDatesV1) {
+    const dated = backfillEntityDates(saved);
+    saved.assets = dated.assets;
+    saved.insurance = dated.insurance;
+    saved.household = { ...(saved.household || {}), entityDatesV1: true };
+  }
+  // Guess which categories track loans / assets / policies (first run only), then bring every sub-category list,
+  // link and budget line in step — idempotent, a no-op once everything is consistent.
+  const result = syncAllEntitySubcategories(saved);
+  if (result.changes > 0) result.state.household = { ...(result.state.household || {}), loanBackfillNote: { linked: result.changes, kind: 'subs' } };
+  return result.state;
 }
 
 // Returns an array of {id, delta} balance changes for a transaction — plain
@@ -131,17 +165,19 @@ function reducer(state: any, action: any): any {
     case 'UPDATE_ACCOUNT': return { ...state, accounts: state.accounts.map((a: any) => (a.id === action.payload.id ? action.payload : a)) };
     case 'DELETE_ACCOUNT': return { ...state, accounts: state.accounts.filter((a: any) => a.id !== action.payload) };
 
-    case 'ADD_ASSET': return { ...state, assets: [...state.assets, action.payload] };
-    case 'UPDATE_ASSET': return { ...state, assets: state.assets.map((a: any) => (a.id === action.payload.id ? action.payload : a)) };
-    case 'DELETE_ASSET': return { ...state, assets: state.assets.filter((a: any) => a.id !== action.payload) };
+    case 'ADD_ASSET': return synced({ ...state, assets: [...state.assets, action.payload] });
+    case 'UPDATE_ASSET': return synced({ ...state, assets: state.assets.map((a: any) => (a.id === action.payload.id ? action.payload : a)) });
+    case 'DELETE_ASSET': return synced({ ...state, assets: state.assets.filter((a: any) => a.id !== action.payload) });
 
     case 'ADD_ASSET_TYPE': return { ...state, assetTypes: [...(state.assetTypes || []), action.payload] };
     case 'UPDATE_ASSET_TYPE': return { ...state, assetTypes: (state.assetTypes || []).map((t: any) => (t.id === action.payload.id ? action.payload : t)) };
     case 'DELETE_ASSET_TYPE': return { ...state, assetTypes: (state.assetTypes || []).filter((t: any) => t.id !== action.payload) };
 
-    case 'ADD_LIABILITY': return { ...state, liabilities: [...state.liabilities, action.payload] };
-    case 'UPDATE_LIABILITY': return { ...state, liabilities: state.liabilities.map((l: any) => (l.id === action.payload.id ? action.payload : l)) };
-    case 'DELETE_LIABILITY': return { ...state, liabilities: state.liabilities.filter((l: any) => l.id !== action.payload) };
+    // Loans, assets and policies are also sub-categories of the categories that track them; every change
+    // (and every change to which categories track what) re-syncs the lists, links and budget lines.
+    case 'ADD_LIABILITY': return synced({ ...state, liabilities: [...state.liabilities, action.payload] });
+    case 'UPDATE_LIABILITY': return synced({ ...state, liabilities: state.liabilities.map((l: any) => (l.id === action.payload.id ? action.payload : l)) });
+    case 'DELETE_LIABILITY': return synced({ ...state, liabilities: state.liabilities.filter((l: any) => l.id !== action.payload) });
 
     case 'ADD_LIABILITY_TYPE': return { ...state, liabilityTypes: [...(state.liabilityTypes || []), action.payload] };
     case 'UPDATE_LIABILITY_TYPE': return { ...state, liabilityTypes: (state.liabilityTypes || []).map((t: any) => (t.id === action.payload.id ? action.payload : t)) };
@@ -155,16 +191,16 @@ function reducer(state: any, action: any): any {
     case 'UPDATE_EVENT': return { ...state, events: state.events.map((e: any) => (e.id === action.payload.id ? action.payload : e)) };
     case 'DELETE_EVENT': return { ...state, events: state.events.filter((e: any) => e.id !== action.payload) };
 
-    case 'ADD_INSURANCE': return { ...state, insurance: [...state.insurance, action.payload] };
-    case 'UPDATE_INSURANCE': return { ...state, insurance: state.insurance.map((i: any) => (i.id === action.payload.id ? action.payload : i)) };
-    case 'DELETE_INSURANCE': return { ...state, insurance: state.insurance.filter((i: any) => i.id !== action.payload) };
+    case 'ADD_INSURANCE': return synced({ ...state, insurance: [...state.insurance, action.payload] });
+    case 'UPDATE_INSURANCE': return synced({ ...state, insurance: state.insurance.map((i: any) => (i.id === action.payload.id ? action.payload : i)) });
+    case 'DELETE_INSURANCE': return synced({ ...state, insurance: state.insurance.filter((i: any) => i.id !== action.payload) });
 
-    case 'ADD_EXPENSE_CATEGORY': return { ...state, expenseCategories: [...state.expenseCategories, action.payload] };
-    case 'UPDATE_EXPENSE_CATEGORY': return { ...state, expenseCategories: state.expenseCategories.map((c: any) => (c.id === action.payload.id ? action.payload : c)) };
+    case 'ADD_EXPENSE_CATEGORY': return synced({ ...state, expenseCategories: [...state.expenseCategories, action.payload] });
+    case 'UPDATE_EXPENSE_CATEGORY': return synced({ ...state, expenseCategories: state.expenseCategories.map((c: any) => (c.id === action.payload.id ? action.payload : c)) });
     case 'DELETE_EXPENSE_CATEGORY': return { ...state, expenseCategories: state.expenseCategories.filter((c: any) => c.id !== action.payload) };
 
-    case 'ADD_INCOME_CATEGORY': return { ...state, incomeCategories: [...state.incomeCategories, action.payload] };
-    case 'UPDATE_INCOME_CATEGORY': return { ...state, incomeCategories: state.incomeCategories.map((c: any) => (c.id === action.payload.id ? action.payload : c)) };
+    case 'ADD_INCOME_CATEGORY': return synced({ ...state, incomeCategories: [...state.incomeCategories, action.payload] });
+    case 'UPDATE_INCOME_CATEGORY': return synced({ ...state, incomeCategories: state.incomeCategories.map((c: any) => (c.id === action.payload.id ? action.payload : c)) });
     case 'DELETE_INCOME_CATEGORY': return { ...state, incomeCategories: state.incomeCategories.filter((c: any) => c.id !== action.payload) };
 
     case 'ADD_GROUP': return { ...state, groups: [...state.groups, action.payload] };

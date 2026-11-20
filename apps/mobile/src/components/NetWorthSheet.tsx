@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { ChevronRight } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import Sheet from './ui/Sheet';
+import { loanStatus } from '../utils/loans';
+import { assetStatus } from '../utils/entities';
 import Donut, { CHART_COLORS, Slice } from './charts/Donut';
 import { Colors, FontSize, Spacing, Radius, createStyles } from '../constants/theme';
 
@@ -14,9 +16,10 @@ export default function NetWorthSheet({ visible, onClose }: { visible: boolean; 
   const router = useRouter();
   const { assets = [], liabilities = [], accounts = [], assetTypes = [], liabilityTypes = [] } = state;
 
-  const assetValue = (a: any) => Number(a.quantity || 0) * Number(a.currentPrice || 0);
+  const assetValue = (a: any) => assetStatus(a, state.transactions || []).current;
   const totalAssets = assets.reduce((s: number, a: any) => s + assetValue(a), 0);
-  const totalLiab = liabilities.reduce((s: number, l: any) => s + Number(l.outstanding || 0), 0);
+  const liveBalance = (l: any) => loanStatus(l, state.transactions || []).outstanding;
+  const totalLiab = liabilities.reduce((s: number, l: any) => s + liveBalance(l), 0);
   const net = totalAssets - totalLiab;
 
   const typeLabel = (list: any[], id: string) => list.find((t: any) => t.id === id)?.label || String(id || 'Other').replace(/_/g, ' ');
@@ -60,12 +63,12 @@ export default function NetWorthSheet({ visible, onClose }: { visible: boolean; 
 
       <Text style={styles.section}>What you owe</Text>
       {liabilities.length === 0 ? <Text style={styles.empty}>No loans or liabilities. 🎉</Text> : liabilities.map((l: any) => (
-        <Pressable key={l.id} onPress={() => go('/(app)/liabilities')} style={styles.itemRow} accessibilityRole="button" accessibilityLabel={`${l.name}, outstanding ${fmt(l.outstanding)}. Open liabilities`}>
+        <Pressable key={l.id} onPress={() => go('/(app)/liabilities')} style={styles.itemRow} accessibilityRole="button" accessibilityLabel={`${l.name}, outstanding ${fmt(liveBalance(l))}. Open liabilities`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.itemName} numberOfLines={1}>{l.name}</Text>
             <Text style={styles.itemMeta}>{typeLabel(liabilityTypes, l.type)}{l.emi ? ` • EMI ${fmt(l.emi)}` : ''}</Text>
           </View>
-          <Text style={[styles.itemVal, { color: Colors.red }]}>{fmt(l.outstanding)}</Text>
+          <Text style={[styles.itemVal, { color: Colors.red }]}>{fmt(liveBalance(l))}</Text>
           <ChevronRight size={16} color={Colors.text3} />
         </Pressable>
       ))}

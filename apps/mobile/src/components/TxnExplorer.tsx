@@ -57,6 +57,23 @@ function TxnExplorerView({ cfg, onCloseList, detailId, setDetailId }: {
     { text: 'Delete', style: 'destructive', onPress: () => { dispatch({ type: 'DELETE_TRANSACTION', payload: t.id }); setDetailId(null); } },
   ]);
 
+  // Which loan / asset / policy this transaction counts toward (if any), and a way to undo that.
+  const linkOf = (t: any) => {
+    const hit = ([['liabilityId', 'liabilities', 'loan'], ['assetId', 'assets', 'asset'], ['policyId', 'insurance', 'policy']] as const)
+      .find(([f]) => t[f]);
+    if (!hit) return null;
+    const e = ((state as any)[hit[1]] || []).find((x: any) => x.id === t[hit[0]]);
+    return { field: hit[0], noun: hit[2], name: e?.name || 'removed ' + hit[2] };
+  };
+  const confirmUnlink = (t: any) => {
+    const l = linkOf(t);
+    if (!l) return;
+    Alert.alert(`Unlink from ${l.name}?`, `This transaction will stop counting toward the ${l.noun}. It stays in your records and moves to the review list, where you can link it again.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Unlink', onPress: () => dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...t, [l.field]: '', subcategory: '', noAutoLink: true, unlinkedFrom: t[l.field] } }) },
+    ]);
+  };
+
   const colorOf = (t: any) => (t.type === 'transfer' ? Colors.blue : t.type === 'income' ? Colors.green : Colors.red);
   const signOf = (t: any) => (t.type === 'transfer' ? '' : t.type === 'income' ? '+' : '-');
   const titleOf = (t: any) => (t.type === 'transfer' ? `${accName(t.account)} → ${accName(t.toAccount)}` : `${t.category}${t.subcategory ? ` · ${t.subcategory}` : ''}`);
@@ -69,6 +86,7 @@ function TxnExplorerView({ cfg, onCloseList, detailId, setDetailId }: {
     ['Sub-category', detail.subcategory],
     ['Group', detail.group],
     ['Event', events.find((e: any) => e.id === detail.eventId)?.name],
+    ['Loan repaid', (state.liabilities || []).find((l: any) => l.id === detail.liabilityId)?.name],
     ['Notes', detail.notes],
   ] : [];
 
@@ -145,6 +163,19 @@ function TxnExplorerView({ cfg, onCloseList, detailId, setDetailId }: {
                 </View>
               ))}
             </View>
+            {linkOf(detail) ? (
+              <View style={styles.detailCard}>
+                <View style={styles.detailRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailKey}>Counts toward</Text>
+                    <Text style={styles.detailVal}>{linkOf(detail)!.name}</Text>
+                  </View>
+                  <Pressable onPress={() => confirmUnlink(detail)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Unlink from ${linkOf(detail)!.name}`}>
+                    <Text style={styles.unlink}>Unlink</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </>
         ) : null}
       </Sheet>
@@ -155,6 +186,7 @@ function TxnExplorerView({ cfg, onCloseList, detailId, setDetailId }: {
 }
 
 const styles = createStyles(() => ({
+  unlink: { color: Colors.accentLight, fontWeight: '800', fontSize: FontSize.base, paddingHorizontal: Spacing.sm },
   summary: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', backgroundColor: Colors.panelHover, borderRadius: Radius.md, padding: Spacing.lg },
   summaryLabel: { color: Colors.text2, fontSize: FontSize.sm, fontWeight: '600' },
   summaryValue: { fontSize: FontSize.xxl, fontWeight: '800', marginTop: 2 },

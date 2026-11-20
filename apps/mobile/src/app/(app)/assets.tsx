@@ -1,25 +1,25 @@
 import RecordSheet from '../../components/RecordSheet';
+import TransactionFormModal from '../../components/TransactionFormModal';
+import AssetFormModal from '../../components/entity/AssetFormModal';
+import { useTxnExplorer } from '../../components/TxnExplorer';
+import LinkPaymentsSheet from '../../components/LinkPaymentsSheet';
+import UnlinkedPaymentsSheet, { unlinkedPayments } from '../../components/UnlinkedPayments';
+import { assetStatus, assetBaseline, categoriesTracking } from '../../utils/entities';
 import React, { useState, useMemo } from 'react';
 import { View, FlatList, Pressable, Alert } from 'react-native';
 import { Text, TextInput } from '../../components/ui/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TrendingUp, Plus, Edit2, Trash2, Settings2, Info, Search } from 'lucide-react-native';
+import { TrendingUp, Plus, Edit2, Trash2, Settings2, Search, Clock, ChevronRight } from 'lucide-react-native';
 import { useApp, DEFAULT_ASSET_TYPES } from '../../context/AppContext';
 import { Card, Button, EmptyState, AppModal, FormField, SelectField, ScreenHeader, Badge, PageHero, FilterChips, Tap } from '../../components/ui';
 import type { ChipOption } from '../../components/ui';
 import Donut, { CHART_COLORS, Slice } from '../../components/charts/Donut';
-import { useFieldErrors } from '../../hooks/useFieldErrors';
 import { Colors, FontSize, Spacing, Radius, createStyles } from '../../constants/theme';
-import { MAX_NAME_LENGTH, MAX_SHORT_LENGTH, MAX_NOTES_LENGTH, sanitizeNumericInput } from '../../utils/validation';
+import { MAX_SHORT_LENGTH } from '../../utils/validation';
 
 // Ported from apps/web/src/pages/Assets.jsx. The web version has a
 // table/by-type dual view — on mobile a single scrollable card list carries
 // the same info more comfortably, so that's the only list mode here.
-
-const TYPE_UNIT: Record<string, string> = {
-  gold: 'grams', mutual_fund: 'units', stock: 'shares', fd: 'months', pf: '₹ balance',
-  nps: '₹ balance', property: 'sqft', crypto: 'coins', other: 'units',
-};
 
 const getSwatches = () => [Colors.accent, Colors.green, Colors.red, Colors.yellow, Colors.blue, Colors.accent2, '#f97316', '#06b6d4'];
 
@@ -29,14 +29,7 @@ const getTypeMap = (types: any[]) => {
   return { labels, colors };
 };
 
-const emptyForm = () => ({ name: '', type: 'gold', quantity: '', unit: 'grams', purchasePrice: '', currentPrice: '', notes: '' });
 const emptyType = () => ({ label: '', color: Colors.accent });
-
-const NUMERIC_RULES = {
-  quantity: { label: 'Quantity', min: 0 },
-  purchasePrice: { label: 'Purchase Price', min: 0 },
-  currentPrice: { label: 'Current Price', min: 0 },
-};
 
 export default function Assets() {
   const { state, dispatch, uid, fmt, fmtSigned, fmtN } = useApp();
@@ -47,9 +40,14 @@ export default function Assets() {
   const [detail, setDetail] = useState<any>(null);
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; data?: any } | null>(null);
   const [typeModal, setTypeModal] = useState<any>(null); // null | 'manage' | { mode, data? }
-  const [form, setForm] = useState<any>(emptyForm());
   const [typeForm, setTypeForm] = useState<any>(emptyType());
-  const { errors, validate, reset: resetErrors } = useFieldErrors();
+  const transactions = state.transactions || [];
+  const st = (a: any) => assetStatus(a, transactions);
+  const explorer = useTxnExplorer();
+  const [showUnlinked, setShowUnlinked] = useState(false);
+  const [linkFor, setLinkFor] = useState<any>(null);
+  const [recordInit, setRecordInit] = useState<any>(null);
+  const pendingTxns = unlinkedPayments(state, 'asset');
 
   // ── Search + type filter ──
   const [search, setSearch] = useState('');
@@ -60,50 +58,8 @@ export default function Assets() {
     return matchesSearch && matchesType;
   }), [assets, search, filterType]);
 
-  const openAdd = () => { setForm(emptyForm()); resetErrors(); setModal({ mode: 'add' }); };
-  const openEdit = (a: any) => {
-    setForm({
-      ...a,
-      quantity: String(a.quantity ?? ''),
-      purchasePrice: String(a.purchasePrice ?? a.avgPrice ?? ''),
-      currentPrice: String(a.currentPrice ?? ''),
-      notes: a.notes || '',
-    });
-    resetErrors();
-    setModal({ mode: 'edit', data: a });
-  };
-
-  const onTypeChange = (v: string) => setForm((f: any) => ({ ...f, type: v, unit: TYPE_UNIT[v] || 'units' }));
-
-  const setQuantity = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('quantity', val, NUMERIC_RULES.quantity);
-    setForm((f: any) => ({ ...f, quantity: val }));
-  };
-  const setPurchasePrice = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('purchasePrice', val, NUMERIC_RULES.purchasePrice);
-    setForm((f: any) => ({ ...f, purchasePrice: val }));
-  };
-  const setCurrentPrice = (raw: string) => {
-    const val = sanitizeNumericInput(raw);
-    validate('currentPrice', val, NUMERIC_RULES.currentPrice);
-    setForm((f: any) => ({ ...f, currentPrice: val }));
-  };
-
-  const handleSubmit = () => {
-    const qErr = validate('quantity', form.quantity, NUMERIC_RULES.quantity);
-    const pErr = validate('purchasePrice', form.purchasePrice, NUMERIC_RULES.purchasePrice);
-    const cErr = validate('currentPrice', form.currentPrice, NUMERIC_RULES.currentPrice);
-    if (qErr || pErr || cErr) return;
-    if (!form.name.trim()) return;
-
-    const qty = Number(form.quantity), buy = Number(form.purchasePrice), curr = Number(form.currentPrice);
-    const payload = { ...form, quantity: qty, purchasePrice: buy, currentPrice: curr, avgPrice: buy };
-    if (modal?.mode === 'add') dispatch({ type: 'ADD_ASSET', payload: { ...payload, id: uid() } });
-    else dispatch({ type: 'UPDATE_ASSET', payload: { ...payload, id: modal!.data.id } });
-    setModal(null);
-  };
+  const openAdd = () => setModal({ mode: 'add' });
+  const openEdit = (a: any) => setModal({ mode: 'edit', data: a });
 
   const handleDelete = (id: string) => {
     Alert.alert('Delete this asset?', undefined, [
@@ -135,25 +91,17 @@ export default function Assets() {
     ]);
   };
 
-  // ── Value calculations ──
-  const getValues = (a: any) => {
-    const buy = Number(a.purchasePrice ?? a.avgPrice ?? 0) || 0;
-    const curr = Number(a.currentPrice ?? 0) || 0;
-    const qty = Number(a.quantity) || 0;
-    return { invested: qty * buy, current: qty * curr, buy, curr, qty };
-  };
-  const totalPurchase = assets.reduce((s: number, a: any) => s + getValues(a).invested, 0);
-  const totalCurrent = assets.reduce((s: number, a: any) => s + getValues(a).current, 0);
+  // ── Value calculations (derived from linked transactions) ──
+  const statuses = new Map<string, ReturnType<typeof assetStatus>>();
+  assets.forEach((a: any) => statuses.set(a.id, st(a)));
+  const totalPurchase = assets.reduce((s: number, a: any) => s + statuses.get(a.id)!.invested, 0);
+  const totalCurrent = assets.reduce((s: number, a: any) => s + statuses.get(a.id)!.current, 0);
   const totalGain = totalCurrent - totalPurchase;
-
-  const liveQty = Number(form.quantity) || 0, liveBuy = Number(form.purchasePrice) || 0, liveCurr = Number(form.currentPrice) || 0;
-  const liveCost = liveQty * liveBuy, liveVal = liveQty * liveCurr, liveGain = liveVal - liveCost;
-
   const gainPctTotal = totalPurchase > 0 ? (totalGain / totalPurchase) * 100 : 0;
 
   const byType = assetTypes.map((t: any) => {
     const items = assets.filter((a: any) => a.type === t.key);
-    return { key: t.key as string, label: t.label as string, color: (t.color || Colors.accent) as string, count: items.length, value: items.reduce((s: number, a: any) => s + getValues(a).current, 0) };
+    return { key: t.key as string, label: t.label as string, color: (t.color || Colors.accent) as string, count: items.length, value: items.reduce((s: number, a: any) => s + statuses.get(a.id)!.current, 0) };
   });
   const chipOptions: ChipOption[] = [
     { key: 'all', label: 'All', count: assets.length },
@@ -166,6 +114,13 @@ export default function Assets() {
 
   const header = (
     <View style={styles.listHeader}>
+      {pendingTxns.length > 0 ? (
+        <Card style={styles.pendingCard}>
+          <Text style={styles.noteTitle}>{pendingTxns.length} transaction{pendingTxns.length === 1 ? '' : 's'} need an asset</Text>
+          <Text style={styles.noteText}>They are in a category that tracks assets, but I cannot tell which asset they belong to. Assign them so each asset's value is right, or mark them "Not an asset".</Text>
+          <Button title="Review & assign" size="sm" onPress={() => setShowUnlinked(true)} />
+        </Card>
+      ) : null}
       <PageHero
         label="Portfolio value"
         value={fmt(totalCurrent)}
@@ -258,9 +213,10 @@ export default function Assets() {
           )
         }
         renderItem={({ item: a }: { item: any }) => {
-          const { invested, current, buy, curr } = getValues(a);
-          const gain = current - invested;
-          const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+          const stt = statuses.get(a.id)!;
+          const { invested, current, gain, gainPct } = stt;
+          const { buy, curr } = assetBaseline(a);
+          const last = stt.payments[0];
           const color = TYPE_COLORS[a.type] || Colors.text2;
           const gColor = gain >= 0 ? Colors.green : Colors.red;
           const share = totalCurrent > 0 ? (current / totalCurrent) * 100 : 0;
@@ -306,6 +262,13 @@ export default function Assets() {
                   </View>
                 </View>
 
+                {last ? (
+                  <View style={[styles.statusChip, { backgroundColor: Colors.greenBg }]}>
+                    <Clock size={15} color={Colors.green} />
+                    <Text style={[styles.statusText, { color: Colors.green }]} numberOfLines={1}>Last added {fmt(last.amount)} on {String(last.date).slice(0, 10)}</Text>
+                  </View>
+                ) : null}
+
                 {a.notes ? <Text style={styles.notes} numberOfLines={2}>{a.notes}</Text> : null}
               </Card>
             </Tap>
@@ -313,64 +276,7 @@ export default function Assets() {
         }}
       />
 
-      {/* Add/Edit Asset Modal */}
-      {modal && (
-        <AppModal
-          visible
-          title={modal.mode === 'add' ? 'Add Asset' : 'Edit Asset'}
-          onClose={() => setModal(null)}
-          footer={
-            <View style={styles.actions}>
-              <Button title="Cancel" variant="ghost" onPress={() => setModal(null)} style={{ flex: 1 }} />
-              <Button title={modal.mode === 'add' ? 'Add Asset' : 'Update'} onPress={handleSubmit} style={{ flex: 1 }} />
-            </View>
-          }
-        >
-          <View style={styles.helpBox}>
-            <Info size={14} color={Colors.accentLight} />
-            <Text style={styles.helpText}>
-              <Text style={{ fontWeight: '700' }}>Purchase Price</Text> = what you paid per unit.{' '}
-              <Text style={{ fontWeight: '700' }}>Current Price</Text> = today's market price. Gain/Loss is auto-calculated.
-            </Text>
-          </View>
-
-          <FormField label="Asset Name" value={form.name} onChangeText={(v) => setForm((f: any) => ({ ...f, name: v }))}
-            maxLength={MAX_NAME_LENGTH} placeholder="e.g. 22K Gold, Axis Bluechip" />
-          <SelectField label="Asset Type" value={form.type} onChange={onTypeChange}
-            options={assetTypes.map((t: any) => ({ label: t.label, value: t.key }))} />
-          <FormField label="Quantity" hint="(how many you own)" keyboardType="decimal-pad" value={form.quantity}
-            onChangeText={setQuantity} error={errors.quantity} placeholder="e.g. 10" />
-          <FormField label="Unit" hint="(grams / shares / units)" value={form.unit}
-            onChangeText={(v) => setForm((f: any) => ({ ...f, unit: v }))} maxLength={MAX_SHORT_LENGTH} placeholder="e.g. grams" />
-          <FormField label="Purchase Price ₹" hint="(per unit, what you paid)" keyboardType="decimal-pad" value={form.purchasePrice}
-            onChangeText={setPurchasePrice} error={errors.purchasePrice} placeholder="0" />
-          <FormField label="Current Price ₹" hint="(per unit, today)" keyboardType="decimal-pad" value={form.currentPrice}
-            onChangeText={setCurrentPrice} error={errors.currentPrice} placeholder="0" />
-
-          {(liveBuy > 0 || liveCurr > 0) && (
-            <View style={styles.calcPreview}>
-              <View style={styles.calcItem}>
-                <Text style={styles.calcLabel}>Total Invested</Text>
-                <Text style={[styles.calcValue, { color: Colors.text2 }]}>{fmt(liveCost)}</Text>
-              </View>
-              <View style={styles.calcItem}>
-                <Text style={styles.calcLabel}>Current Value</Text>
-                <Text style={[styles.calcValue, { color: Colors.green }]}>{fmt(liveVal)}</Text>
-              </View>
-              <View style={styles.calcItem}>
-                <Text style={styles.calcLabel}>Gain / Loss</Text>
-                <Text style={[styles.calcValue, { color: liveGain >= 0 ? Colors.green : Colors.red }]}>
-                  {liveGain >= 0 ? '+' : ''}{fmtSigned(liveGain)}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          <FormField label="Notes" hint="(optional)" value={form.notes} onChangeText={(v) => setForm((f: any) => ({ ...f, notes: v }))}
-            maxLength={MAX_NOTES_LENGTH} placeholder="e.g. SBI FD maturing Dec 2025" />
-
-        </AppModal>
-      )}
+      <AssetFormModal visible={!!modal} entity={modal?.mode === 'edit' ? modal.data : undefined} onClose={() => setModal(null)} />
 
       {/* Type Manager Modal */}
       {typeModal === 'manage' && (
@@ -417,27 +323,86 @@ export default function Assets() {
       {(() => {
         const a = detail ? assets.find((x: any) => x.id === detail.id) : null;
         if (!a) return null;
-        const { invested, current, buy, curr } = getValues(a);
-        const gain = current - invested;
-        const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+        const stt = statuses.get(a.id)!;
+        const { gain, gainPct } = stt;
+        const { buy, curr } = assetBaseline(a);
+        const cat = categoriesTracking(state, 'asset').find((x) => x.txnType === 'expense')?.cat;
+        const startRecord = () => setRecordInit({
+          type: 'expense', category: cat?.name || '', group: cat?.group || '', subcategory: a.subName || '', assetId: a.id, notes: a.name,
+        });
+        const sign = (n: number) => (n >= 0 ? '+' : '');
         return (
           <RecordSheet
             visible title={a.name} subtitle={TYPE_LABELS[a.type] || a.type}
-            headlineLabel="Current value" headline={fmt(current)}
+            headlineLabel="Current value" headline={fmt(stt.current)}
             rows={[
-              ['Amount invested', fmt(invested)],
-              ['Gain / loss', `${gain >= 0 ? '+' : ''}${fmtSigned(gain)} (${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`],
-              ['Quantity', `${fmtN(a.quantity)} ${a.unit || 'units'}`],
+              ['Amount invested', fmt(stt.invested)],
+              ['Gain / loss', `${sign(gain)}${fmtSigned(gain)} (${sign(gainPct)}${gainPct.toFixed(1)}%)`],
+              ['Quantity (as entered)', `${fmtN(a.quantity)} ${a.unit || 'units'} (as of ${stt.asOf})`],
               ['Average buy price', fmt(buy)],
               ['Current price', fmt(curr)],
+              ['Value you entered', `${fmt(stt.baselineCurrent)} (as of ${stt.asOf})`],
+              ['Added via transactions', stt.payments.length ? `${stt.netAdded >= 0 ? '+' : '-'}${fmt(Math.abs(stt.netAdded))}${stt.withdrawals > 0 ? ` (${fmt(stt.contributions)} in, ${fmt(stt.withdrawals)} out)` : ''}` : undefined],
+              ['Earlier transactions (not counted)', stt.earlierCount ? `${stt.earlierCount} • ${fmt(stt.earlierTotal)} — before ${stt.asOf}` : undefined],
               ['Notes', a.notes],
             ]}
             onClose={() => setDetail(null)}
             onEdit={() => { setDetail(null); setTimeout(() => openEdit(a), 250); }}
             onDelete={() => { setDetail(null); setTimeout(() => handleDelete(a.id), 250); }}
-          />
+          >
+            {cat ? (
+              <Button title="Record investment" icon={<Plus size={16} color="#fff" />} onPress={startRecord} />
+            ) : (
+              <Text style={styles.payEmpty}>To record investments here, open Categories and choose which expense category tracks assets.</Text>
+            )}
+
+            {stt.earlierCount > 0 && !a.earlierOk ? (
+              <View style={styles.linkCard}>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
+                  <Clock size={16} color={Colors.accentLight} />
+                  <Text style={styles.linkTitle}>{stt.earlierCount} transaction{stt.earlierCount === 1 ? '' : 's'} ({fmt(stt.earlierTotal)}) dated before the figures date</Text>
+                </View>
+                <Text style={styles.linkSub}>The figures you entered are as of {stt.asOf}. Were they the amounts <Text style={{ fontWeight: '800', color: Colors.text1 }}>before</Text> these transactions (count them), or already <Text style={{ fontWeight: '800', color: Colors.text1 }}>after</Text> them (leave them out)?</Text>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                  <Button title="Count them" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_ASSET', payload: { ...a, valueAsOf: stt.earlierFrom || a.valueAsOf } })} />
+                  <Button title="Already included" variant="secondary" size="sm" style={{ flex: 1 }}
+                    onPress={() => dispatch({ type: 'UPDATE_ASSET', payload: { ...a, earlierOk: true } })} />
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.payHeadRow}>
+              <Text style={styles.payHeading}>Transactions since {stt.asOf}</Text>
+              <Pressable onPress={() => setLinkFor(a)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Link a transaction to this asset">
+                <Text style={styles.payAll}>+ Link</Text>
+              </Pressable>
+              {stt.payments.length > 0 ? (
+                <Pressable onPress={() => explorer.show(`${a.name} — transactions`, stt.payments, `Since ${stt.asOf}`)} hitSlop={8} style={styles.seeAll} accessibilityRole="button" accessibilityLabel={`See all transactions for ${a.name}`}>
+                  <Text style={styles.payAll}>See all ›</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {stt.payments.length === 0 ? (
+              <Text style={styles.payEmpty}>No transactions linked yet. Record an investment (or choose this asset when adding a transaction) and the value will update automatically.</Text>
+            ) : stt.payments.slice(0, 12).map((t: any) => (
+              <Pressable key={t.id} onPress={() => explorer.showTxn(t)} style={styles.payRow} accessibilityRole="button"
+                accessibilityLabel={`${t.type === 'income' ? 'Withdrawal' : 'Investment'} of ${fmt(t.amount)} on ${String(t.date).slice(0, 10)}. Tap for the transaction`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.payDate}>{String(t.date).slice(0, 10)}</Text>
+                  <Text style={styles.payMeta}>{t.type === 'income' ? 'Taken out' : 'Put in'}</Text>
+                </View>
+                <Text style={[styles.payAmt, { color: t.type === 'income' ? Colors.red : Colors.green }]}>{t.type === 'income' ? '-' : '+'}{fmt(t.amount)}</Text>
+                <ChevronRight size={16} color={Colors.text3} />
+              </Pressable>
+            ))}
+          </RecordSheet>
         );
       })()}
+      {recordInit && <TransactionFormModal visible mode="add" initial={recordInit} onClose={() => setRecordInit(null)} />}
+      {explorer.node}
+      <LinkPaymentsSheet kind="asset" entity={linkFor} visible={!!linkFor} onClose={() => setLinkFor(null)} />
+      <UnlinkedPaymentsSheet kind="asset" visible={showUnlinked} onClose={() => setShowUnlinked(false)} />
     </SafeAreaView>
   );
 }
@@ -484,18 +449,23 @@ const styles = createStyles(() => ({
   valueAmt: { fontSize: FontSize.base, fontWeight: '700', color: Colors.text1 },
   notes: { fontSize: FontSize.sm, color: Colors.text2, marginTop: Spacing.sm, fontStyle: 'italic' },
   actions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
-  helpBox: {
-    flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-start', backgroundColor: Colors.panel,
-    borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.sm, padding: Spacing.md, marginBottom: Spacing.lg,
-  },
-  helpText: { flex: 1, color: Colors.text2, fontSize: FontSize.sm, lineHeight: 18 },
-  calcPreview: {
-    flexDirection: 'row', justifyContent: 'space-between', backgroundColor: Colors.inset,
-    borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.sm, padding: Spacing.md, marginBottom: Spacing.lg,
-  },
-  calcItem: { flex: 1, alignItems: 'center', gap: 2 },
-  calcLabel: { fontSize: FontSize.xs, color: Colors.text2 },
-  calcValue: { fontSize: FontSize.md, fontWeight: '700' },
+  pendingCard: { gap: Spacing.sm, backgroundColor: Colors.yellowBg, borderColor: Colors.yellow + '55' },
+  noteTitle: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  noteText: { color: Colors.text2, fontSize: FontSize.sm, lineHeight: 18 },
+  statusChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm, paddingVertical: 8, paddingHorizontal: Spacing.md, borderRadius: Radius.md },
+  statusText: { flex: 1, fontSize: FontSize.sm, fontWeight: '700' },
+  linkCard: { gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.accentGlow },
+  linkTitle: { flex: 1, color: Colors.text1, fontWeight: '800', fontSize: FontSize.base },
+  linkSub: { color: Colors.text2, fontSize: FontSize.sm },
+  payHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
+  seeAll: { minHeight: 44, justifyContent: 'center' },
+  payAll: { color: Colors.accentLight, fontWeight: '800', fontSize: FontSize.base },
+  payHeading: { color: Colors.text1, fontWeight: '800', fontSize: FontSize.md },
+  payEmpty: { color: Colors.text2, fontSize: FontSize.base },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 48, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  payDate: { color: Colors.text1, fontWeight: '700', fontSize: FontSize.base },
+  payAmt: { fontWeight: '800', fontSize: FontSize.base },
+  payMeta: { color: Colors.text2, fontSize: FontSize.sm },
   typeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md,
     backgroundColor: Colors.panel, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border,
